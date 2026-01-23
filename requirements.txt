@@ -3,3 +3,6 @@ supabase
 pandas
 qrcode
 xlsxwriter
+opencv-python-headless
+pytesseract
+numpy
