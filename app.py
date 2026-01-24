@@ -7,7 +7,6 @@ from io import BytesIO
 import re
 import cv2
 import numpy as np
-import pytesseract
 from streamlit_autorefresh import st_autorefresh
 import qrcode
 from PIL import Image, ImageDraw, ImageFont
@@ -18,7 +17,7 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- CREDENZIALI ---
-CREDENZIALI = {"Luca": "luca2026", "Ivan": "ivan2026"}
+CREDENZIALI = {"Luca Simonini ": "luca2026", "Ivan Pohorilyak": "ivan2026"}
 TIMEOUT_MINUTI = 10 
 
 # --- CONFIGURAZIONE ZONE ---
@@ -29,13 +28,15 @@ ZONE_INFO = {
     "D Commercianti con telo": 100, "E lavorazioni esterni": 100, "F verso altri sedi": 100
 }
 
-st.set_page_config(page_title="1.1 Master", layout="wide")
+st.set_page_config(page_title="1.1 Master", layout="wide") [cite: 2026-01-08]
 
 # --- GESTIONE SESSIONE E TIMEOUT ---
 if 'user_autenticato' not in st.session_state:
     st.session_state['user_autenticato'] = None
 if 'last_action' not in st.session_state:
     st.session_state['last_action'] = datetime.now()
+if 'zona_rilevata' not in st.session_state:
+    st.session_state['zona_rilevata'] = ""
 
 def aggiorna_attivita():
     st.session_state['last_action'] = datetime.now()
@@ -52,7 +53,7 @@ def controllo_timeout():
 # --- FUNZIONI CORE ---
 def registra_log(targa, azione, dettaglio, utente):
     supabase.table("log_movimenti").insert({
-        "targa": targa, "azione": azione, "dettaglio": dettaglio, "utente": utente
+        "targa": targa, "azione": action, "dettaglio": dettaglio, "utente": utente
     }).execute()
 
 def get_colori():
@@ -77,16 +78,6 @@ def get_modelli(marca):
             mod = r["marca_modello"].replace(marca, "", 1).strip().title()
             if mod: modelli.add(mod)
     return sorted(modelli)
-
-def leggi_targa_da_foto(image_file):
-    try:
-        file_bytes = np.asarray(bytearray(image_file.read()), dtype=np.uint8)
-        img = cv2.imdecode(file_bytes, 1)
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        gray = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)[1]
-        testo = pytesseract.image_to_string(gray, config='--psm 7')
-        return re.sub(r'[^A-Z0-9]', '', testo.upper())
-    except: return ""
 
 def leggi_qr_zona(image_file):
     try:
@@ -123,18 +114,38 @@ else:
     scelta = st.radio("Seleziona Funzione", menu, horizontal=True)
     st.markdown("---")
 
+    # 1️⃣ Reset QR se l’utente cambia menu [cite: 2026-01-02]
+    if scelta != "➕ Ingresso" and scelta != "🔍 Ricerca/Sposta":
+        st.session_state["zona_rilevata"] = ""
+        st.session_state["zona_rilevata_sposta"] = ""
+
     # --- 1. INGRESSO ---
     if scelta == "➕ Ingresso":
         aggiorna_attivita()
         st.subheader("Registrazione Nuova Vettura")
-        attiva_cam = st.toggle("📸 Scanner Targa (OCR)")
-        t_letta = ""
-        if attiva_cam:
-            foto = st.camera_input("Scatta foto targa")
-            if foto: t_letta = leggi_targa_da_foto(foto)
+
+        st.markdown("### 📍 Scanner Zona (Obbligatorio)")
+        foto_z = st.camera_input("Inquadra QR-CODE della zona", key="cam_zona")
+
+        if foto_z:
+            zona_letta = leggi_qr_zona(foto_z)
+            if zona_letta in ZONE_INFO:
+                st.session_state["zona_rilevata"] = zona_letta
+                st.success(f"Zona rilevata: {zona_letta}")
+            else:
+                st.session_state["zona_rilevata"] = ""
+                st.error("QR non valido o zona sconosciuta")
+        
+        zona_attuale = st.session_state.get("zona_rilevata", "")
 
         with st.form("f_ingresso", clear_on_submit=True):
-            targa = st.text_input("TARGA", value=t_letta).upper().strip()
+            # 2️⃣ Mostrare zona selezionata in chiaro nel form [cite: 2026-01-02]
+            if zona_attuale:
+                st.info(f"✅ Zona scansionata: **{zona_attuale}**")
+            else:
+                st.warning("⚠️ Scansiona il QR della zona sopra per abilitare la registrazione")
+
+            targa = st.text_input("TARGA").upper().strip()
             marche = get_marche()
             marca_sel = st.selectbox("Marca", ["Nuova..."] + marche)
             if marca_sel == "Nuova...": marca_sel = st.text_input("Scrivi Marca").capitalize()
@@ -145,38 +156,50 @@ else:
             colore = st.selectbox("Colore", ["Nuovo..."] + get_colori())
             if colore == "Nuovo...": colore = st.text_input("Specifica Colore")
             km = st.number_input("Chilometri", min_value=0)
-            n_chiave = st.number_input("N° Chiave", min_value=0)
-            
-            st.markdown("### 📍 Scanner Zona (Obbligatorio)")
-            foto_z = st.camera_input("Inquadra QR-CODE della zona")
-            zona_rilevata = leggi_qr_zona(foto_z) if foto_z else ""
-            
-            if zona_rilevata in ZONE_INFO:
-                st.success(f"Zona rilevata: {zona_rilevata}")
-            
+            n_chiave = st.number_input("N° Chiave (0=Commerciante)", min_value=0)
             note = st.text_area("Note")
 
-            if st.form_submit_button("REGISTRA VETTURA"):
+            submit = st.form_submit_button(
+                "REGISTRA VETTURA",
+                disabled=not st.session_state.get("zona_rilevata")
+            )
+
+            if submit:
                 aggiorna_attivita()
+                zona_finale = st.session_state.get("zona_rilevata", "")
+                testo_chiave = f"CHIAVE: {n_chiave}" if n_chiave > 0 else "CHIAVE: COMMERCIANTE"
+                final_note = f"[AUTO COMMERCIANTE] {note}".strip() if n_chiave == 0 else note
+
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa):
                     st.warning("⚠️ Formato targa non valido (Esempio: AA123BB)")
-                elif not zona_rilevata:
-                    st.error("❌ Errore: Devi scansionare il QR della zona!")
                 elif targa and marca_sel and modello_sel:
                     check = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute()
-                    if check.data:
+                    if check.data: [cite: 2025-12-30]
                         st.error("ERRORE: Vettura già presente!")
                     else:
-                        data = {"targa": targa, "marca_modello": modello_completo, "colore": colore, "km": km, "numero_chiave": n_chiave, "zona_attuale": zona_rilevata, "note": note, "stato": "PRESENTE", "utente_ultimo_invio": utente_attivo}
+                        data = {"targa": targa, "marca_modello": modello_completo, "colore": colore, "km": km, "numero_chiave": n_chiave, "zona_attuale": zona_finale, "note": final_note, "stato": "PRESENTE", "utente_ultimo_invio": utente_attivo}
                         supabase.table("parco_usato").insert(data).execute()
-                        registra_log(targa, "Ingresso", f"Inserita in {zona_rilevata}", utente_attivo)
-                        st.success(f"Vettura {targa} registrata!")
+                        registra_log(targa, "Ingresso", f"Inserita in {zona_finale} - {testo_chiave}", utente_attivo)
+                        st.session_state["zona_rilevata"] = ""
+                        st.success(f"Vettura {targa} registrata correttamente!")
                         st.rerun()
 
     # --- 2. RICERCA / SPOSTA ---
     elif scelta == "🔍 Ricerca/Sposta":
         aggiorna_attivita()
         st.subheader("Ricerca e Gestione")
+        
+        st.markdown("### 🔄 Scansiona QR Nuova Zona per Spostare")
+        foto_sposta = st.camera_input("Inquadra QR Nuova Zona", key="cam_sposta")
+        if foto_sposta:
+            n_z_letta = leggi_qr_zona(foto_sposta)
+            if n_z_letta in ZONE_INFO:
+                st.session_state["zona_rilevata_sposta"] = n_z_letta
+                st.info(f"Nuova zona rilevata: {n_z_letta}")
+            else:
+                st.session_state["zona_rilevata_sposta"] = ""
+                st.error("QR non valido")
+
         tipo = st.radio("Cerca per:", ["Targa", "Numero Chiave"], horizontal=True)
         q = st.text_input(f"Inserisci {tipo}").strip()
         if q:
@@ -189,22 +212,19 @@ else:
                         with st.expander(f"🚗 {v['targa']} - {v['marca_modello']}", expanded=True):
                             st.write(f"📍 Zona Attuale: **{v['zona_attuale']}**")
                             
-                            st.markdown("#### 🔄 Spostamento tramite QR")
-                            foto_sposta = st.camera_input("Scansiona QR Nuova Zona", key=f"sp_{v['targa']}")
-                            n_z_qr = leggi_qr_zona(foto_sposta) if foto_sposta else ""
-                            
-                            if n_z_qr: st.info(f"Nuova zona rilevata: {n_z_qr}")
+                            zona_nuova = st.session_state.get("zona_rilevata_sposta", "")
+                            if zona_nuova:
+                                st.info(f"👉 Destinazione: **{zona_nuova}**")
 
                             c1, c2 = st.columns(2)
-                            if c1.button("Conferma Spostamento", key=f"b_{v['targa']}"):
+                            sposta_disabilitato = not zona_nuova
+                            if c1.button("Conferma Spostamento", key=f"b_{v['targa']}", disabled=sposta_disabilitato):
                                 aggiorna_attivita()
-                                if n_z_qr in ZONE_INFO:
-                                    supabase.table("parco_usato").update({"zona_attuale": n_z_qr}).eq("targa", v['targa']).execute()
-                                    registra_log(v['targa'], "Spostamento", f"In {n_z_qr}", utente_attivo)
-                                    st.success(f"Spostata in {n_z_qr}")
-                                    st.rerun()
-                                else:
-                                    st.error("Scansiona un QR zona valido!")
+                                supabase.table("parco_usato").update({"zona_attuale": zona_nuova}).eq("targa", v['targa']).execute()
+                                registra_log(v['targa'], "Spostamento", f"In {zona_nuova}", utente_attivo)
+                                st.session_state["zona_rilevata_sposta"] = ""
+                                st.success(f"Spostata in {zona_nuova}")
+                                st.rerun()
                             
                             if c2.button("🔴 CONSEGNA", key=f"d_{v['targa']}"):
                                 aggiorna_attivita()
@@ -214,7 +234,7 @@ else:
                 else:
                     st.warning("Vettura non trovata.")
 
-    # --- 📋 VERIFICA E EXPORT ---
+    # --- 📋 SEZIONI RESTANTI RIMANGONO INVARIATE ---
     elif scelta == "📋 Verifica Zone":
         aggiorna_attivita()
         z_sel = st.selectbox("Zona", list(ZONE_INFO.keys()))
@@ -235,7 +255,6 @@ else:
                 df_ex.to_excel(writer, index=False)
             st.download_button("📥 Scarica Excel", output.getvalue(), "Piazzale.xlsx")
 
-    # --- 5. LOG MOVIMENTI ---
     elif scelta == "📜 Log Movimenti":
         st.subheader("Cronologia Operazioni in Tempo Reale")
         auto_refresh = st.toggle("🔄 Aggiornamento automatico (10 sec)", value=True)
@@ -257,14 +276,11 @@ else:
             df_l = df_l.rename(columns={"created_at": "🕒 Data/Ora", "targa": "🚗 Targa", "azione": "⚙️ Azione", "dettaglio": "📝 Dettaglio", "utente": "👤 Operatore"})
             st.dataframe(df_l[["🕒 Data/Ora","🚗 Targa","⚙️ Azione","📝 Dettaglio","👤 Operatore"]], use_container_width=True)
 
-    # --- 🖨️ STAMPA QR (Novità) ---
     elif scelta == "🖨️ Stampa QR":
         st.subheader("Genera QR per le Zone")
         z_sel_qr = st.selectbox("Seleziona Zona da stampare", list(ZONE_INFO.keys()))
-        
         qr = qrcode.make(f"ZONA|{z_sel_qr}")
         buf = BytesIO()
         qr.save(buf, format="PNG")
-        
         st.image(buf.getvalue(), caption=f"QR per {z_sel_qr}", width=300)
         st.download_button("📥 Scarica QR da stampare", buf.getvalue(), f"QR_{z_sel_qr}.png")
