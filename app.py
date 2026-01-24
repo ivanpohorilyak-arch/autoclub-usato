@@ -1,7 +1,8 @@
 import streamlit as st
 from supabase import create_client
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
+import time
 from io import BytesIO
 import re
 import cv2
@@ -16,6 +17,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- CREDENZIALI ---
 CREDENZIALI = {"Luca": "luca2026", "Ivan": "ivan2026"}
+TIMEOUT_MINUTI = 10  # Tempo di inattività prima del logout
 
 # --- CONFIGURAZIONE ZONE ---
 ZONE_INFO = {
@@ -25,11 +27,25 @@ ZONE_INFO = {
     "D Commercianti con telo": 100, "E lavorazioni esterni": 100, "F verso altri sedi": 100
 }
 
-st.set_page_config(page_title="1.1 Master", layout="wide") # [cite: 2026-01-08]
+st.set_page_config(page_title="1.1 Master", layout="wide")
 
-# --- SESSION STATE ---
+# --- GESTIONE SESSIONE E TIMEOUT ---
 if 'user_autenticato' not in st.session_state:
     st.session_state['user_autenticato'] = None
+if 'last_action' not in st.session_state:
+    st.session_state['last_action'] = datetime.now()
+
+def aggiorna_attivita():
+    st.session_state['last_action'] = datetime.now()
+
+def controllo_timeout():
+    if st.session_state['user_autenticato']:
+        trascorso = datetime.now() - st.session_state['last_action']
+        if trascorso > timedelta(minutes=TIMEOUT_MINUTI):
+            st.session_state['user_autenticato'] = None
+            st.warning("Sessione scaduta per inattività. Effettua di nuovo il login.")
+            time.sleep(2)
+            st.rerun()
 
 # --- FUNZIONI CORE ---
 def registra_log(targa, azione, dettaglio, utente):
@@ -70,20 +86,24 @@ def leggi_targa_da_foto(image_file):
         return re.sub(r'[^A-Z0-9]', '', testo.upper())
     except: return ""
 
+# Esegui controllo timeout all'avvio di ogni ciclo
+controllo_timeout()
+
 # --- LOGICA ACCESSO ---
 if st.session_state['user_autenticato'] is None:
     st.title("🔐 Accesso Autoclub Center")
-    u = st.selectbox("Operatore", list(CREDENZIALI.keys()))
-    p = st.text_input("Password", type="password")
+    u = st.selectbox("Seleziona Operatore", list(CREDENZIALI.keys()))
+    p = st.text_input("Inserisci Password", type="password")
     if st.button("Entra"):
         if p == CREDENZIALI[u]:
             st.session_state['user_autenticato'] = u
+            aggiorna_attivita()
             st.rerun()
         else: st.error("Password errata")
 else:
     utente_attivo = st.session_state['user_autenticato']
     st.sidebar.info(f"Operatore: {utente_attivo}")
-    if st.sidebar.button("Logout"):
+    if st.sidebar.button("Logout Manuale"):
         st.session_state['user_autenticato'] = None
         st.rerun()
 
@@ -93,6 +113,7 @@ else:
 
     # --- 1. INGRESSO ---
     if scelta == "➕ Ingresso":
+        aggiorna_attivita()
         st.subheader("Registrazione Nuova Vettura")
         attiva_cam = st.toggle("📸 Scanner Targa (OCR)")
         t_letta = ""
@@ -117,21 +138,23 @@ else:
             note = st.text_area("Note")
 
             if st.form_submit_button("REGISTRA VETTURA"):
+                aggiorna_attivita()
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa):
                     st.warning("⚠️ Formato targa non valido (Esempio: AA123BB)")
                 elif targa and marca_sel and modello_sel:
                     check = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute()
-                    if check.data: # [cite: 2025-12-30]
+                    if check.data:
                         st.error("ERRORE: Vettura già presente!")
                     else:
                         data = {"targa": targa, "marca_modello": modello_completo, "colore": colore, "km": km, "numero_chiave": n_chiave, "zona_attuale": zona, "note": note, "stato": "PRESENTE", "utente_ultimo_invio": utente_attivo}
                         supabase.table("parco_usato").insert(data).execute()
                         registra_log(targa, "Ingresso", f"Inserita in {zona}", utente_attivo)
                         st.success(f"Vettura {targa} registrata!")
-                else: st.error("Campi obbligatori mancanti")
+                        st.rerun()
 
     # --- 2. RICERCA / SPOSTA ---
     elif scelta == "🔍 Ricerca/Sposta":
+        aggiorna_attivita()
         st.subheader("Ricerca e Gestione")
         tipo = st.radio("Cerca per:", ["Targa", "Numero Chiave"], horizontal=True)
         q = st.text_input(f"Inserisci {tipo}").strip()
@@ -143,14 +166,16 @@ else:
                 if res and res.data:
                     for v in res.data:
                         with st.expander(f"🚗 {v['targa']} - {v['marca_modello']}", expanded=True):
-                            st.write(f"📍 Posizione: **{v['zona_attuale']}** | 🔑 Chiave: **{v['numero_chiave']}**")
+                            st.write(f"📍 Zona: **{v['zona_attuale']}** | 🔑 Chiave: **{v['numero_chiave']}**")
                             n_z = st.selectbox("Sposta in:", list(ZONE_INFO.keys()), key=v['targa'])
                             c1, c2 = st.columns(2)
                             if c1.button("Sposta", key=f"b_{v['targa']}"):
+                                aggiorna_attivita()
                                 supabase.table("parco_usato").update({"zona_attuale": n_z}).eq("targa", v['targa']).execute()
                                 registra_log(v['targa'], "Spostamento", f"In {n_z}", utente_attivo)
                                 st.rerun()
                             if c2.button("🔴 CONSEGNA", key=f"d_{v['targa']}"):
+                                aggiorna_attivita()
                                 supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute()
                                 registra_log(v['targa'], "Consegna", "Uscita definitiva", utente_attivo)
                                 st.rerun()
@@ -159,6 +184,7 @@ else:
 
     # --- 3. VERIFICA ZONE ---
     elif scelta == "📋 Verifica Zone":
+        aggiorna_attivita()
         z_sel = st.selectbox("Zona", list(ZONE_INFO.keys()))
         res = supabase.table("parco_usato").select("*").eq("zona_attuale", z_sel).eq("stato", "PRESENTE").execute()
         st.metric(f"Stato {z_sel}", f"{len(res.data)} / 100")
@@ -169,6 +195,7 @@ else:
 
     # --- 4. EXPORT ---
     elif scelta == "📊 Export":
+        aggiorna_attivita()
         res = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE").execute()
         if res.data:
             df_ex = pd.DataFrame(res.data).drop(columns=['stato'], errors='ignore')
