@@ -21,7 +21,7 @@ CREDENZIALI = {
     "Luca Simonini": "2026", 
     "Ivan Pohorilyak": "1234"
 }
-TIMEOUT_MINUTI = 15
+TIMEOUT_MINUTI = 10
 
 # --- CONFIGURAZIONE ZONE ---
 ZONE_INFO = {
@@ -31,7 +31,7 @@ ZONE_INFO = {
     "D Commercianti con telo": 100, "E lavorazioni esterni": 100, "F verso altri sedi": 100
 }
 
-st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1", layout="wide") 
+st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1", layout="wide")
 
 # --- GESTIONE SESSIONE ---
 if 'user_autenticato' not in st.session_state:
@@ -119,7 +119,7 @@ if st.session_state['user_autenticato'] is None:
     lista_utenti = list(CREDENZIALI.keys())
     
     u = st.selectbox("Seleziona Operatore", lista_utenti)
-    p = st.text_input("Inserisci PIN (4 cifre)", type="password") # [cite: 2026-01-02]
+    p = st.text_input("Inserisci PIN (4 cifre)", type="password") 
     
     if st.button("ACCEDI"):
         if p == CREDENZIALI[u]:
@@ -160,7 +160,7 @@ else:
             if zona_attuale: st.info(f"✅ Zona selezionata: **{zona_attuale}**")
             targa = st.text_input("TARGA").upper().strip()
             
-            colore_suggerito = suggerisci_colore(targa) if targa else None # [cite: 2026-01-02]
+            colore_suggerito = suggerisci_colore(targa) if targa else None 
             lista_colori = get_colori()
             idx_colore = 0
             if colore_suggerito in lista_colori:
@@ -189,7 +189,6 @@ else:
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa):
                     st.warning("⚠️ Formato targa non valido (Esempio: AA123BB)")
                 elif targa and m_sel and mod_sel:
-                    # Blocco Duplicati [cite: 2025-12-30]
                     check = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute()
                     if check.data:
                         st.error("ERRORE: Vettura già presente in piazzale!")
@@ -238,33 +237,41 @@ else:
                                 st.rerun()
                 else: st.warning("Vettura non trovata.")
 
-    # --- 3. MODIFICA ---
+    # --- 3. MODIFICA (Con scelta Targa/Chiave) ---
     elif scelta == "✏️ Modifica":
         aggiorna_attivita()
         st.subheader("Correzione Dati Vettura")
-        t_mod = st.text_input("Inserisci Targa o Numero Chiave da correggere").strip()
-        if t_mod:
-            col_f = "targa" if not t_mod.isdigit() else "numero_chiave"
-            val_f = t_mod.upper() if not t_mod.isdigit() else int(t_mod)
-            res = supabase.table("parco_usato").select("*").eq(col_f, val_f).eq("stato", "PRESENTE").execute()
-            if res.data:
-                v = res.data[0]
-                with st.form("f_modifica"):
-                    st.info(f"Modifica dati per: {v['targa']}")
-                    nuova_targa = st.text_input("Targa", value=v['targa']).upper().strip()
-                    nuova_marca_mod = st.text_input("Marca/Modello", value=v['marca_modello'])
-                    nuovo_colore = st.text_input("Colore", value=v['colore'])
-                    nuovi_km = st.number_input("KM", value=int(v['km']))
-                    nuova_chiave = st.number_input("N. Chiave", value=int(v['numero_chiave']))
-                    nuova_zona = st.selectbox("Zona", list(ZONE_INFO.keys()), index=list(ZONE_INFO.keys()).index(v['zona_attuale']))
-                    nuove_note = st.text_area("Note", value=v['note'])
-                    if st.form_submit_button("SALVA CORREZIONI"):
-                        upd = {"targa": nuova_targa, "marca_modello": nuova_marca_mod, "colore": nuovo_colore, "km": nuovi_km, "numero_chiave": nuova_chiave, "zona_attuale": nuova_zona, "note": nuove_note}
-                        supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute()
-                        registra_log(nuova_targa, "Modifica", f"Dati corretti da {utente_attivo}", utente_attivo)
-                        st.success("Dati aggiornati!")
-                        st.rerun()
-            else: st.warning("Vettura non trovata.")
+        
+        # FIX: Selezione esplicita del tipo di ricerca anche in modifica 
+        tipo_mod = st.radio("Cerca per correggere:", ["Targa", "Numero Chiave"], horizontal=True, key="search_mod_type")
+        q_mod = st.text_input(f"Inserisci {tipo_mod} da correggere").strip()
+        
+        if q_mod:
+            col_f = "targa" if tipo_mod == "Targa" else "numero_chiave"
+            val_f = q_mod.upper() if tipo_mod == "Targa" else int(q_mod) if q_mod.isdigit() else None
+            
+            if val_f is not None:
+                res = supabase.table("parco_usato").select("*").eq(col_f, val_f).eq("stato", "PRESENTE").execute()
+                if res.data:
+                    v = res.data[0]
+                    with st.form("f_modifica"):
+                        st.info(f"Modifica dati per: {v['targa']}")
+                        nuova_targa = st.text_input("Targa", value=v['targa']).upper().strip()
+                        nuova_marca_mod = st.text_input("Marca/Modello", value=v['marca_modello'])
+                        nuovo_colore = st.text_input("Colore", value=v['colore'])
+                        nuovi_km = st.number_input("KM", value=int(v['km']))
+                        nuova_chiave = st.number_input("N. Chiave", value=int(v['numero_chiave']))
+                        nuova_zona = st.selectbox("Zona", list(ZONE_INFO.keys()), index=list(ZONE_INFO.keys()).index(v['zona_attuale']))
+                        nuove_note = st.text_area("Note", value=v['note'])
+                        
+                        if st.form_submit_button("SALVA CORREZIONI"):
+                            upd = {"targa": nuova_targa, "marca_modello": nuova_marca_mod, "colore": nuovo_colore, "km": nuovi_km, "numero_chiave": nuova_chiave, "zona_attuale": nuova_zona, "note": nuove_note}
+                            # Utilizziamo la targa originale della riga trovata per identificare il record da aggiornare
+                            supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute()
+                            registra_log(nuova_targa, "Modifica", f"Dati corretti da {utente_attivo}", utente_attivo)
+                            st.success("Dati aggiornati!")
+                            st.rerun()
+                else: st.warning("Vettura non trovata nel piazzale.")
 
     # --- 4. VERIFICA ZONE ---
     elif scelta == "📋 Verifica Zone":
