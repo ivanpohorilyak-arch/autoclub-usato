@@ -107,7 +107,7 @@ def leggi_qr_zona(image_file):
 
 controllo_timeout()
 
-# --- LOGICA ACCESSO (FIX LOGIN VUOTO) --- [cite: 2026-01-02]
+# --- LOGICA ACCESSO (LOGIN VUOTO) ---
 if st.session_state['user_autenticato'] is None:
     st.title("🔐 Accesso Autoclub Center")
     opzioni_utenti = ["- Seleziona -"] + list(CREDENZIALI.keys())
@@ -288,7 +288,7 @@ else:
             df['created_at'] = pd.to_datetime(df['created_at']).dt.strftime('%d/%m/%Y %H:%M:%S')
             st.dataframe(df[["created_at", "targa", "azione", "dettaglio", "utente"]], use_container_width=True)
 
-    # --- 🖨️ STAMPA QR (VISIBILITÀ MIGLIORATA) --- [cite: 2026-01-02]
+    # --- 🖨️ STAMPA QR (CORREZIONE DIMENSIONE TESTO) ---
     if scelta == "🖨️ Stampa QR":
         st.subheader("Generatore Cartelli Zone")
         z_sel = st.selectbox("Seleziona la zona da stampare", list(ZONE_INFO.keys()))
@@ -299,18 +299,18 @@ else:
             qr_img = qr.make_image(fill_color="black", back_color="white").convert('RGB')
             w, h = qr_img.size
             
-            # Aumentato spazio inferiore per testo più grande
-            new_img = Image.new('RGB', (w, h + 100), 'white')
+            # Ridotto spazio bianco inferiore a 60 pixel
+            new_img = Image.new('RGB', (w, h + 60), 'white')
             new_img.paste(qr_img, (0, 0))
             draw = ImageDraw.Draw(new_img)
             
-            # Caricamento font o fallback su testo più grande e centrato
+            # Ridimensionata scritta per bilanciamento visivo
             text_to_print = f"ZONA: {z_sel.upper()}"
             
-            # Calcolo posizione per centrare la scritta
-            draw.text((w/2 - 110, h + 30), text_to_print, fill="black", font_size=40)
+            # Centratura testo con font standard ridimensionato
+            draw.text((w/2 - 80, h + 20), text_to_print, fill="black")
             
             buf = BytesIO()
             new_img.save(buf, format="PNG")
-            st.image(buf.getvalue(), caption=f"Anteprima Cartello: {z_sel}", width=400)
+            st.image(buf.getvalue(), caption=f"Anteprima Cartello: {z_sel}", width=350)
             st.download_button(label=f"📥 Scarica Cartello {z_sel}", data=buf.getvalue(), file_name=f"QR_{z_sel}.png", mime="image/png")
