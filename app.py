@@ -28,7 +28,6 @@ ZONE_INFO = {
     "D Commercianti con telo": 100, "E lavorazioni esterni": 100, "F verso altri sedi": 100
 }
 
-# Fix SyntaxError: Titolo pulito e citazione commentata
 st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1", layout="wide") # [cite: 2026-01-08]
 
 # --- GESTIONE SESSIONE ---
@@ -66,6 +65,16 @@ def get_colori():
         colori = list(set([str(r['colore']).capitalize() for r in res.data if r['colore']]))
         return sorted(colori) if colori else ["Bianco", "Nero", "Grigio"]
     except: return ["Bianco", "Nero", "Grigio"]
+
+# --- AUTO-APPRENDIMENTO COLORE DA STORICO ---
+def suggerisci_colore(targa_input):
+    try:
+        if len(targa_input) >= 7:
+            res = supabase.table("parco_usato").select("colore").eq("targa", targa_input).order("data_ingresso", desc=True).limit(1).execute()
+            if res.data:
+                return str(res.data[0]['colore']).capitalize()
+        return None
+    except: return None
 
 def get_marche():
     try:
@@ -141,8 +150,18 @@ else:
 
         with st.form("f_ingresso", clear_on_submit=True):
             if zona_attuale: st.info(f"✅ Zona selezionata: **{zona_attuale}**")
+            
             targa = st.text_input("TARGA").upper().strip()
             
+            # --- INTEGRAZIONE AUTO-APPRENDIMENTO COLORE ---
+            colore_suggerito = suggerisci_colore(targa) if targa else None
+            lista_colori = get_colori()
+            
+            idx_colore = 0
+            if colore_suggerito in lista_colori:
+                idx_colore = lista_colori.index(colore_suggerito) + 1
+                st.caption(f"✨ Colore auto-appreso per {targa}: {colore_suggerito}")
+
             marche = get_marche()
             m_sel = st.selectbox("Marca", ["Nuova..."] + marche)
             if m_sel == "Nuova...": m_sel = st.text_input("Specifica Marca").capitalize()
@@ -152,7 +171,8 @@ else:
             if mod_sel == "Nuovo...": mod_sel = st.text_input("Specifica Modello").title()
             
             marca_modello = f"{m_sel} {mod_sel}".strip()
-            colore = st.selectbox("Colore", ["Nuovo..."] + get_colori())
+            
+            colore = st.selectbox("Colore", ["Nuovo..."] + lista_colori, index=idx_colore)
             if colore == "Nuovo...": colore = st.text_input("Specifica Colore")
             
             km = st.number_input("Chilometri", min_value=0)
@@ -169,9 +189,8 @@ else:
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa):
                     st.warning("⚠️ Formato targa non valido (Esempio: AA123BB)")
                 elif targa and m_sel and mod_sel:
-                    # FIX: Sintassi corretta senza tag fuori dai commenti
                     check = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute()
-                    if check.data:
+                    if check.data: # [cite: 2025-12-30]
                         st.error("ERRORE: Vettura già presente in piazzale!")
                     else:
                         data = {"targa": targa, "marca_modello": marca_modello, "colore": colore, "km": km, "numero_chiave": n_chiave, "zona_attuale": zona_attuale, "note": final_note, "stato": "PRESENTE", "utente_ultimo_invio": utente_attivo}
@@ -181,7 +200,7 @@ else:
                         st.success(f"Vettura {targa} registrata correttamente!")
                         st.rerun()
 
-    # --- 2. RICERCA SMART ---
+    # --- 2. RICERCA SMART (con Logic UX Mobile) ---
     elif scelta == "🔍 Ricerca/Sposta":
         aggiorna_attivita()
         st.subheader("Ricerca e Gestione")
@@ -199,21 +218,17 @@ else:
         q = st.text_input(f"Inserisci {tipo}").strip()
 
         if q:
-            # FIX: Ricerca con return per evitare variabili non inizializzate
             if tipo == "Targa":
                 if not re.match(r"^[A-Z0-9]{5,8}$", q.upper()):
                     st.warning("Formato targa non valido")
-                    # return per UX mobile pulita
                 else:
                     col, val = "targa", q.upper()
             else:  
                 if not q.isdigit():
                     st.warning("Il numero chiave deve essere numerico")
-                    # return per UX mobile pulita
                 else:
                     col, val = "numero_chiave", int(q)
 
-            # Esegui query solo se variabili col e val sono state create
             if 'col' in locals() and 'val' in locals():
                 res = supabase.table("parco_usato").select("*").eq(col, val).eq("stato", "PRESENTE").execute()
                 if res and res.data:
@@ -253,14 +268,14 @@ else:
         else:
             st.info("Nessuna vettura presente in questa zona")
 
-    # --- 4. EXPORT ---
+    # --- 4. EXPORT (Auto-adattamento Colonne) ---
     elif scelta == "📊 Export":
         aggiorna_attivita()
         res = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE").execute()
         if res.data:
             df_ex = pd.DataFrame(res.data).drop(columns=["stato"], errors="ignore")
             output = BytesIO()
-            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+            with pd.ExcelWriter(output, engine="xlsxwriter") as writer: # [cite: 2026-01-02]
                 df_ex.to_excel(writer, index=False, sheet_name="Parco Usato")
                 worksheet = writer.sheets["Parco Usato"]
                 for idx, col in enumerate(df_ex.columns):
