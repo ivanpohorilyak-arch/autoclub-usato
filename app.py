@@ -29,7 +29,7 @@ ZONE_INFO = {
 }
 
 # Fix SyntaxError: Titolo pulito e citazione commentata
-st.set_page_config(page_title="1.1 Master", layout="wide") # [cite: 2026-01-08]
+st.set_page_config(page_title="AUTOCLUB CNTER USATO 1.1", layout="wide") # [cite: 2026-01-08]
 
 # --- GESTIONE SESSIONE ---
 if 'user_autenticato' not in st.session_state:
