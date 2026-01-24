@@ -1,4 +1,3 @@
-
 import streamlit as st
 from supabase import create_client
 import pandas as pd
@@ -10,6 +9,8 @@ import cv2
 import numpy as np
 import pytesseract
 from streamlit_autorefresh import st_autorefresh
+import qrcode
+from PIL import Image, ImageDraw, ImageFont
 
 # --- CONFIGURAZIONE DATABASE ---
 SUPABASE_URL = "https://ihhypwraskzhjovyvwxd.supabase.co"
@@ -18,7 +19,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- CREDENZIALI ---
 CREDENZIALI = {"Luca": "luca2026", "Ivan": "ivan2026"}
-TIMEOUT_MINUTI = 10  # Tempo di inattività prima del logout
+TIMEOUT_MINUTI = 10 
 
 # --- CONFIGURAZIONE ZONE ---
 ZONE_INFO = {
@@ -87,14 +88,24 @@ def leggi_targa_da_foto(image_file):
         return re.sub(r'[^A-Z0-9]', '', testo.upper())
     except: return ""
 
-# Esegui controllo timeout all'avvio di ogni ciclo
+def leggi_qr_zona(image_file):
+    try:
+        file_bytes = np.asarray(bytearray(image_file.read()), dtype=np.uint8)
+        img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+        detector = cv2.QRCodeDetector()
+        data, _, _ = detector.detectAndDecode(img)
+        if data.startswith("ZONA|"):
+            return data.replace("ZONA|", "").strip()
+        return ""
+    except: return ""
+
 controllo_timeout()
 
 # --- LOGICA ACCESSO ---
 if st.session_state['user_autenticato'] is None:
     st.title("🔐 Accesso Autoclub Center")
     u = st.selectbox("Seleziona Operatore", list(CREDENZIALI.keys()))
-    p = st.text_input("Inserisci Password", type="password")
+    p = st.text_input("Password", type="password")
     if st.button("Entra"):
         if p == CREDENZIALI[u]:
             st.session_state['user_autenticato'] = u
@@ -108,7 +119,7 @@ else:
         st.session_state['user_autenticato'] = None
         st.rerun()
 
-    menu = ["➕ Ingresso", "🔍 Ricerca/Sposta", "📋 Verifica Zone", "📊 Export", "📜 Log Movimenti"]
+    menu = ["➕ Ingresso", "🔍 Ricerca/Sposta", "📋 Verifica Zone", "📊 Export", "📜 Log Movimenti", "🖨️ Stampa QR"]
     scelta = st.radio("Seleziona Funzione", menu, horizontal=True)
     st.markdown("---")
 
@@ -135,21 +146,30 @@ else:
             if colore == "Nuovo...": colore = st.text_input("Specifica Colore")
             km = st.number_input("Chilometri", min_value=0)
             n_chiave = st.number_input("N° Chiave", min_value=0)
-            zona = st.selectbox("Assegna Zona", list(ZONE_INFO.keys()))
+            
+            st.markdown("### 📍 Scanner Zona (Obbligatorio)")
+            foto_z = st.camera_input("Inquadra QR-CODE della zona")
+            zona_rilevata = leggi_qr_zona(foto_z) if foto_z else ""
+            
+            if zona_rilevata in ZONE_INFO:
+                st.success(f"Zona rilevata: {zona_rilevata}")
+            
             note = st.text_area("Note")
 
             if st.form_submit_button("REGISTRA VETTURA"):
                 aggiorna_attivita()
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa):
                     st.warning("⚠️ Formato targa non valido (Esempio: AA123BB)")
+                elif not zona_rilevata:
+                    st.error("❌ Errore: Devi scansionare il QR della zona!")
                 elif targa and marca_sel and modello_sel:
                     check = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute()
                     if check.data:
                         st.error("ERRORE: Vettura già presente!")
                     else:
-                        data = {"targa": targa, "marca_modello": modello_completo, "colore": colore, "km": km, "numero_chiave": n_chiave, "zona_attuale": zona, "note": note, "stato": "PRESENTE", "utente_ultimo_invio": utente_attivo}
+                        data = {"targa": targa, "marca_modello": modello_completo, "colore": colore, "km": km, "numero_chiave": n_chiave, "zona_attuale": zona_rilevata, "note": note, "stato": "PRESENTE", "utente_ultimo_invio": utente_attivo}
                         supabase.table("parco_usato").insert(data).execute()
-                        registra_log(targa, "Ingresso", f"Inserita in {zona}", utente_attivo)
+                        registra_log(targa, "Ingresso", f"Inserita in {zona_rilevata}", utente_attivo)
                         st.success(f"Vettura {targa} registrata!")
                         st.rerun()
 
@@ -167,23 +187,34 @@ else:
                 if res and res.data:
                     for v in res.data:
                         with st.expander(f"🚗 {v['targa']} - {v['marca_modello']}", expanded=True):
-                            st.write(f"📍 Zona: **{v['zona_attuale']}** | 🔑 Chiave: **{v['numero_chiave']}**")
-                            n_z = st.selectbox("Sposta in:", list(ZONE_INFO.keys()), key=v['targa'])
+                            st.write(f"📍 Zona Attuale: **{v['zona_attuale']}**")
+                            
+                            st.markdown("#### 🔄 Spostamento tramite QR")
+                            foto_sposta = st.camera_input("Scansiona QR Nuova Zona", key=f"sp_{v['targa']}")
+                            n_z_qr = leggi_qr_zona(foto_sposta) if foto_sposta else ""
+                            
+                            if n_z_qr: st.info(f"Nuova zona rilevata: {n_z_qr}")
+
                             c1, c2 = st.columns(2)
-                            if c1.button("Sposta", key=f"b_{v['targa']}"):
+                            if c1.button("Conferma Spostamento", key=f"b_{v['targa']}"):
                                 aggiorna_attivita()
-                                supabase.table("parco_usato").update({"zona_attuale": n_z}).eq("targa", v['targa']).execute()
-                                registra_log(v['targa'], "Spostamento", f"In {n_z}", utente_attivo)
-                                st.rerun()
+                                if n_z_qr in ZONE_INFO:
+                                    supabase.table("parco_usato").update({"zona_attuale": n_z_qr}).eq("targa", v['targa']).execute()
+                                    registra_log(v['targa'], "Spostamento", f"In {n_z_qr}", utente_attivo)
+                                    st.success(f"Spostata in {n_z_qr}")
+                                    st.rerun()
+                                else:
+                                    st.error("Scansiona un QR zona valido!")
+                            
                             if c2.button("🔴 CONSEGNA", key=f"d_{v['targa']}"):
                                 aggiorna_attivita()
                                 supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute()
                                 registra_log(v['targa'], "Consegna", "Uscita definitiva", utente_attivo)
                                 st.rerun()
                 else:
-                    st.warning("Vettura non trovata o valore non valido.")
+                    st.warning("Vettura non trovata.")
 
-    # --- 3. VERIFICA ZONE ---
+    # --- 📋 VERIFICA E EXPORT ---
     elif scelta == "📋 Verifica Zone":
         aggiorna_attivita()
         z_sel = st.selectbox("Zona", list(ZONE_INFO.keys()))
@@ -194,7 +225,6 @@ else:
             df['data_ingresso'] = pd.to_datetime(df['data_ingresso']).dt.strftime('%d/%m/%Y %H:%M')
             st.dataframe(df, use_container_width=True)
 
-    # --- 4. EXPORT ---
     elif scelta == "📊 Export":
         aggiorna_attivita()
         res = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE").execute()
@@ -226,3 +256,15 @@ else:
             df_l['created_at'] = pd.to_datetime(df_l['created_at']).dt.strftime('%d/%m/%Y %H:%M:%S')
             df_l = df_l.rename(columns={"created_at": "🕒 Data/Ora", "targa": "🚗 Targa", "azione": "⚙️ Azione", "dettaglio": "📝 Dettaglio", "utente": "👤 Operatore"})
             st.dataframe(df_l[["🕒 Data/Ora","🚗 Targa","⚙️ Azione","📝 Dettaglio","👤 Operatore"]], use_container_width=True)
+
+    # --- 🖨️ STAMPA QR (Novità) ---
+    elif scelta == "🖨️ Stampa QR":
+        st.subheader("Genera QR per le Zone")
+        z_sel_qr = st.selectbox("Seleziona Zona da stampare", list(ZONE_INFO.keys()))
+        
+        qr = qrcode.make(f"ZONA|{z_sel_qr}")
+        buf = BytesIO()
+        qr.save(buf, format="PNG")
+        
+        st.image(buf.getvalue(), caption=f"QR per {z_sel_qr}", width=300)
+        st.download_button("📥 Scarica QR da stampare", buf.getvalue(), f"QR_{z_sel_qr}.png")
