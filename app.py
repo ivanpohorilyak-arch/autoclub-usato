@@ -31,7 +31,7 @@ ZONE_INFO = {
     "D Commercianti con telo": 100, "E lavorazioni esterni": 100, "F verso altri sedi": 100
 }
 
-st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1", layout="wide") # [cite: 2026-01-08]
+st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1", layout="wide") 
 
 # --- GESTIONE SESSIONE ---
 if 'user_autenticato' not in st.session_state:
@@ -113,18 +113,13 @@ def leggi_qr_zona(image_file):
 
 controllo_timeout()
 
-# --- LOGICA ACCESSO (CON PIN E PARAMETRI URL) ---
+# --- LOGICA ACCESSO (CON PIN) ---
 if st.session_state['user_autenticato'] is None:
-    user_url = st.query_params.get("user", None) # [cite: 2026-01-02]
-    st.title("🔐 Accesso Rapido Autoclub Center")
+    st.title("🔐 Accesso Autoclub Center")
     lista_utenti = list(CREDENZIALI.keys())
-    idx_default = 0
-    if user_url in lista_utenti:
-        idx_default = lista_utenti.index(user_url)
-        st.success(f"Operatore riconosciuto: **{user_url}**")
-
-    u = st.selectbox("Seleziona il tuo nome", lista_utenti, index=idx_default)
-    p = st.text_input("Inserisci PIN (4 cifre)", type="password") # 
+    
+    u = st.selectbox("Seleziona Operatore", lista_utenti)
+    p = st.text_input("Inserisci PIN (4 cifre)", type="password") # [cite: 2026-01-02]
     
     if st.button("ACCEDI"):
         if p == CREDENZIALI[u]:
@@ -138,7 +133,6 @@ else:
     utente_attivo = st.session_state['user_autenticato']
     st.sidebar.info(f"Operatore: {utente_attivo}")
     
-    # Menu Principale
     menu = ["➕ Ingresso", "🔍 Ricerca/Sposta", "✏️ Modifica", "📋 Verifica Zone", "📊 Export", "📜 Log", "🖨️ Stampa QR"]
     scelta = st.radio("Seleziona Funzione", menu, horizontal=True)
     st.markdown("---")
@@ -159,14 +153,14 @@ else:
                 st.success(f"Zona rilevata: {z_letta}")
             else:
                 st.session_state["zona_rilevata"] = ""
-                st.error("QR non valido o zona sconosciuta")
+                st.error("QR non valido")
         
         zona_attuale = st.session_state.get("zona_rilevata", "")
         with st.form("f_ingresso", clear_on_submit=True):
             if zona_attuale: st.info(f"✅ Zona selezionata: **{zona_attuale}**")
             targa = st.text_input("TARGA").upper().strip()
             
-            colore_suggerito = suggerisci_colore(targa) if targa else None # 
+            colore_suggerito = suggerisci_colore(targa) if targa else None # [cite: 2026-01-02]
             lista_colori = get_colori()
             idx_colore = 0
             if colore_suggerito in lista_colori:
@@ -195,7 +189,7 @@ else:
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa):
                     st.warning("⚠️ Formato targa non valido (Esempio: AA123BB)")
                 elif targa and m_sel and mod_sel:
-                    # Blocco Duplicati
+                    # Blocco Duplicati [cite: 2025-12-30]
                     check = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute()
                     if check.data:
                         st.error("ERRORE: Vettura già presente in piazzale!")
@@ -238,7 +232,7 @@ else:
                                 st.success(f"Spostata in {zona_nuova}")
                                 st.rerun()
                             if c2.button("🔴 CONSEGNA", key=f"d_{v['targa']}"):
-                                st.session_state["zona_rilevata_sposta"] = "" # [cite: 2026-01-02]
+                                st.session_state["zona_rilevata_sposta"] = "" 
                                 supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute()
                                 registra_log(v['targa'], "Consegna", "Uscita definitiva", utente_attivo)
                                 st.rerun()
@@ -250,7 +244,6 @@ else:
         st.subheader("Correzione Dati Vettura")
         t_mod = st.text_input("Inserisci Targa o Numero Chiave da correggere").strip()
         if t_mod:
-            # Ricerca flessibile per targa o chiave [cite: 2026-01-02]
             col_f = "targa" if not t_mod.isdigit() else "numero_chiave"
             val_f = t_mod.upper() if not t_mod.isdigit() else int(t_mod)
             res = supabase.table("parco_usato").select("*").eq(col_f, val_f).eq("stato", "PRESENTE").execute()
@@ -317,10 +310,3 @@ else:
         qr.save(buf, format="PNG")
         st.image(buf.getvalue(), caption=f"QR {z_sel}", width=300)
         st.download_button("📥 Scarica QR", buf.getvalue(), f"QR_{z_sel}.png")
-
-    # Area Link Personalizzati nella Sidebar [cite: 2026-01-02]
-    with st.sidebar.expander("🔗 Link Rapidi Operatori"):
-        base = "https://autoclub-usato.streamlit.app/" # Sostituisci con il tuo URL
-        for nome in CREDENZIALI.keys():
-            st.write(f"**{nome}**")
-            st.code(f"{base}?user={nome.replace(' ', '%20')}", language="text")
