@@ -28,8 +28,7 @@ ZONE_INFO = {
     "D Commercianti con telo": 100, "E lavorazioni esterni": 100, "F verso altri sedi": 100
 }
 
-# 1️⃣ FIX: SyntaxError rimosso (citazione spostata in commento)
-st.set_page_config(page_title="1.1 Master", layout="wide") # [cite: 2026-01-08]
+st.set_page_config(page_title="1.1 Master", layout="wide") #
 
 # --- GESTIONE SESSIONE ---
 if 'user_autenticato' not in st.session_state:
@@ -47,12 +46,11 @@ def controllo_timeout():
         trascorso = datetime.now() - st.session_state['last_action']
         if trascorso > timedelta(minutes=TIMEOUT_MINUTI):
             st.session_state['user_autenticato'] = None
-            st.warning("Sessione scaduta. Effettua il login.")
+            st.warning("Sessione scaduta. Effettua di nuovo il login.")
             time.sleep(2)
             st.rerun()
 
 # --- FUNZIONI CORE ---
-# 2️⃣ FIX: Corretto "azione": azione (era "action")
 def registra_log(targa, azione, dettaglio, utente):
     try:
         supabase.table("log_movimenti").insert({
@@ -68,14 +66,28 @@ def get_colori():
         return sorted(colori) if colori else ["Bianco", "Nero", "Grigio"]
     except: return ["Bianco", "Nero", "Grigio"]
 
+# --- AUTO-APPRENDIMENTO MARCA E MODELLO ---
 def get_marche():
     try:
         res = supabase.table("parco_usato").select("marca_modello").execute()
         marche = set()
         for r in res.data:
             if r.get("marca_modello"):
-                marche.add(r["marca_modello"].split()[0].capitalize())
+                marca = r["marca_modello"].split()[0].capitalize() #
+                marche.add(marca)
         return sorted(marche)
+    except: return []
+
+def get_modelli(marca):
+    try:
+        res = supabase.table("parco_usato").select("marca_modello").execute()
+        modelli = set()
+        for r in res.data:
+            full_text = r.get("marca_modello", "")
+            if full_text.startswith(marca):
+                mod = full_text.replace(marca, "", 1).strip().title() #
+                if mod: modelli.add(mod)
+        return sorted(modelli)
     except: return []
 
 def leggi_qr_zona(image_file):
@@ -94,8 +106,8 @@ controllo_timeout()
 # --- LOGICA ACCESSO ---
 if st.session_state['user_autenticato'] is None:
     st.title("🔐 Accesso Autoclub")
-    u = st.selectbox("Operatore", list(CREDENZIALI.keys()))
-    p = st.text_input("Password", type="password")
+    u = st.selectbox("Seleziona Operatore", list(CREDENZIALI.keys()))
+    p = st.text_input("Inserisci Password", type="password")
     if st.button("Entra"):
         if p == CREDENZIALI[u]:
             st.session_state['user_autenticato'] = u
@@ -107,11 +119,10 @@ else:
     menu = ["➕ Ingresso", "🔍 Ricerca/Sposta", "📋 Verifica Zone", "📊 Export", "📜 Log Movimenti", "🖨️ Stampa QR"]
     scelta = st.radio("Seleziona Funzione", menu, horizontal=True)
     
-    # Reset zona se si cambia menu
     if scelta != "➕ Ingresso" and scelta != "🔍 Ricerca/Sposta":
         st.session_state["zona_rilevata"] = ""
 
-    # --- 1. INGRESSO ---
+    # --- 1. INGRESSO (CON AUTO-APPRENDIMENTO) ---
     if scelta == "➕ Ingresso":
         aggiorna_attivita()
         st.subheader("Registrazione Nuova Vettura")
@@ -132,11 +143,26 @@ else:
             if zona_attuale: 
                 st.info(f"✅ Zona selezionata: **{zona_attuale}**")
             else:
-                st.warning("⚠️ Scansiona il QR della zona sopra per abilitare il tasto Registra")
+                st.warning("⚠️ Scansiona il QR della zona sopra")
 
             targa = st.text_input("TARGA").upper().strip()
-            marca = st.text_input("Marca/Modello").capitalize()
+            
+            # Logica Auto-apprendimento nel form
+            lista_marche = get_marche()
+            marca_sel = st.selectbox("Marca", ["Nuova..."] + lista_marche)
+            if marca_sel == "Nuova...":
+                marca_sel = st.text_input("Specifica Nuova Marca").capitalize()
+            
+            lista_modelli = get_modelli(marca_sel) if marca_sel else []
+            modello_sel = st.selectbox("Modello", ["Nuovo..."] + lista_modelli)
+            if modello_sel == "Nuovo...":
+                modello_sel = st.text_input("Specifica Nuovo Modello").title()
+            
+            marca_modello_completo = f"{marca_sel} {modello_sel}".strip()
+            
             colore = st.selectbox("Colore", ["Nuovo..."] + get_colori())
+            if colore == "Nuovo...": colore = st.text_input("Specifica Colore")
+            
             km = st.number_input("Chilometri", min_value=0)
             n_chiave = st.number_input("N. Chiave (0=Commerciante)", min_value=0)
             note = st.text_area("Note")
@@ -149,25 +175,94 @@ else:
                 final_note = f"[AUTO COMMERCIANTE] {note}".strip() if n_chiave == 0 else note
 
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa):
-                    st.warning("⚠️ Formato targa non valido (Esempio: AA123BB)")
-                elif targa and marca:
-                    # 3️⃣ FIX: SyntaxError rimosso da check.data
+                    st.warning("⚠️ Formato targa non valido")
+                elif targa and marca_sel and modello_sel:
                     check = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute()
-                    if check.data: # [cite: 2025-12-30]
-                        st.error("ERRORE: Vettura già presente in piazzale!")
+                    if check.data: #
+                        st.error("ERRORE: Vettura già presente!")
                     else:
-                        data = {"targa": targa, "marca_modello": marca, "colore": colore, "km": km, "numero_chiave": n_chiave, "zona_attuale": zona_attuale, "note": final_note, "stato": "PRESENTE", "utente_ultimo_invio": utente_attivo}
+                        data = {
+                            "targa": targa, "marca_modello": marca_modello_completo, "colore": colore, 
+                            "km": km, "numero_chiave": n_chiave, "zona_attuale": zona_attuale, 
+                            "note": final_note, "stato": "PRESENTE", "utente_ultimo_invio": utente_attivo
+                        }
                         supabase.table("parco_usato").insert(data).execute()
                         registra_log(targa, "Ingresso", f"In {zona_attuale} - {txt_chiave}", utente_attivo)
                         st.session_state["zona_rilevata"] = ""
                         st.success(f"Vettura {targa} registrata correttamente!")
                         st.rerun()
 
-    # --- 5. LOG MOVIMENTI ---
+    # --- 2. RICERCA SMART (Targa o Chiave) ---
+    elif scelta == "🔍 Ricerca/Sposta":
+        aggiorna_attivita()
+        st.subheader("Ricerca Smart e Spostamento")
+        
+        # Scanner per spostamento zona
+        st.info("Inquadra QR Nuova Zona per abilitare lo spostamento")
+        foto_sposta = st.camera_input("Scansiona QR Destinazione", key="cam_sposta")
+        n_z_qr = ""
+        if foto_sposta:
+            n_z_qr = leggi_qr_zona(foto_sposta)
+            if n_z_qr in ZONE_INFO:
+                st.success(f"Nuova zona rilevata: {n_z_qr}")
+            else: st.error("QR Zona non valido")
+
+        tipo = st.radio("Cerca per:", ["Targa", "Numero Chiave"], horizontal=True)
+        q = st.text_input(f"Inserisci {tipo}").strip()
+        
+        if q:
+            col = "targa" if tipo == "Targa" else "numero_chiave"
+            # Casting corretto per query
+            val_query = q.upper() if tipo == "Targa" else int(q) if q.isdigit() else None
+            
+            if val_query is not None:
+                res = supabase.table("parco_usato").select("*").eq(col, val_query).eq("stato", "PRESENTE").execute()
+                
+                if res.data:
+                    for v in res.data:
+                        with st.expander(f"🚗 {v['targa']} - {v['marca_modello']}", expanded=True):
+                            st.write(f"📍 Posizione: **{v['zona_attuale']}** | 🔑 Chiave: **{v['numero_chiave']}**")
+                            
+                            c1, c2 = st.columns(2)
+                            # Bottone abilitato solo con QR zona scansionato
+                            if c1.button("SPOSTA IN NUOVA ZONA", key=f"mv_{v['targa']}", disabled=not n_z_qr):
+                                supabase.table("parco_usato").update({"zona_attuale": n_z_qr}).eq("targa", v['targa']).execute()
+                                registra_log(v['targa'], "Spostamento", f"Spostata in {n_z_qr}", utente_attivo)
+                                st.success(f"Spostamento a {n_z_qr} completato!")
+                                st.rerun()
+                                
+                            if c2.button("🔴 REGISTRA USCITA", key=f"out_{v['targa']}"):
+                                supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute()
+                                registra_log(v['targa'], "Consegna", "Uscita definitiva", utente_attivo)
+                                st.success("Uscita registrata!")
+                                st.rerun()
+                else:
+                    st.warning("Nessuna vettura 'PRESENTE' trovata con questi criteri.")
+
+    # --- LE ALTRE SEZIONI RIMANGONO INVARIATE ---
+    elif scelta == "📋 Verifica Zone":
+        aggiorna_attivita()
+        z_sel = st.selectbox("Zona", list(ZONE_INFO.keys()))
+        res = supabase.table("parco_usato").select("*").eq("zona_attuale", z_sel).eq("stato", "PRESENTE").execute()
+        st.metric(f"Stato {z_sel}", f"{len(res.data)} / 100")
+        if res.data:
+            df = pd.DataFrame(res.data)[["targa", "marca_modello", "numero_chiave", "data_ingresso"]]
+            df['data_ingresso'] = pd.to_datetime(df['data_ingresso']).dt.strftime('%d/%m/%Y %H:%M')
+            st.dataframe(df, use_container_width=True)
+
+    elif scelta == "📊 Export":
+        aggiorna_attivita()
+        res = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE").execute()
+        if res.data:
+            df_ex = pd.DataFrame(res.data).drop(columns=['stato'], errors='ignore')
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df_ex.to_excel(writer, index=False)
+            st.download_button("📥 Scarica Excel", output.getvalue(), "Piazzale.xlsx")
+
     elif scelta == "📜 Log Movimenti":
         st.subheader("Cronologia Operazioni in Tempo Reale")
-        auto_refresh = st.toggle("🔄 Aggiornamento automatico (10 sec)", value=True)
-        if auto_refresh:
+        if st.toggle("🔄 Aggiornamento automatico (10 sec)", value=True):
             st_autorefresh(interval=10000, key="log_refresh")
         
         try:
@@ -180,7 +275,6 @@ else:
         except Exception as e:
             st.error(f"Errore caricamento log: {e}")
 
-    # --- 🖨️ STAMPA QR ---
     elif scelta == "🖨️ Stampa QR":
         st.subheader("Genera QR per le Zone")
         z_sel_qr = st.selectbox("Seleziona Zona da stampare", list(ZONE_INFO.keys()))
