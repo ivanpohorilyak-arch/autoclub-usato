@@ -107,18 +107,24 @@ def leggi_qr_zona(image_file):
 
 controllo_timeout()
 
-# --- LOGICA ACCESSO ---
+# --- LOGICA ACCESSO (FIX LOGIN VUOTO) ---
 if st.session_state['user_autenticato'] is None:
     st.title("🔐 Accesso Autoclub Center")
-    u = st.selectbox("Seleziona Operatore", list(CREDENZIALI.keys()))
+    opzioni_utenti = ["- Seleziona -"] + list(CREDENZIALI.keys())
+    u = st.selectbox("Seleziona Operatore", opzioni_utenti)
     p = st.text_input("Inserisci PIN (4 cifre)", type="password")
+    
     if st.button("ACCEDI"):
-        if p == CREDENZIALI[u]:
+        if u == "- Seleziona -":
+            st.warning("⚠️ Per favore, seleziona un operatore.")
+        elif p == CREDENZIALI.get(u):
             st.session_state['user_autenticato'] = u
             aggiorna_attivita()
             st.rerun()
-        else: st.error("PIN non corretto")
+        else: 
+            st.error("PIN non corretto")
 else:
+    # --- APP DOPO IL LOGIN ---
     utente_attivo = st.session_state['user_autenticato']
     st.sidebar.info(f"Operatore: {utente_attivo}")
     menu = ["➕ Ingresso", "🔍 Ricerca/Sposta", "✏️ Modifica", "📋 Verifica Zone", "📊 Export", "📜 Log", "🖨️ Stampa QR"]
