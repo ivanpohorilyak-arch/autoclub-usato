@@ -3,6 +3,7 @@ streamlit-autorefresh
 supabase
 pandas
 qrcode
+Pillow
 xlsxwriter
 opencv-python-headless
 pytesseract
