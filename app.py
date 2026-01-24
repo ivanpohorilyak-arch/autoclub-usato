@@ -7,7 +7,7 @@ import re
 import cv2
 import numpy as np
 import pytesseract
-from streamlit_autorefresh import st_autorefresh # Nuova libreria stabile
+from streamlit_autorefresh import st_autorefresh
 
 # --- CONFIGURAZIONE DATABASE ---
 SUPABASE_URL = "https://ihhypwraskzhjovyvwxd.supabase.co"
@@ -25,7 +25,7 @@ ZONE_INFO = {
     "D Commercianti con telo": 100, "E lavorazioni esterni": 100, "F verso altri sedi": 100
 }
 
-st.set_page_config(page_title="AUTOCLUB CENTER USATO DATA V.1", layout="wide") # [cite: 2026-01-08]
+st.set_page_config(page_title="1.1 Master", layout="wide") # [cite: 2026-01-08]
 
 # --- SESSION STATE ---
 if 'user_autenticato' not in st.session_state:
@@ -73,8 +73,8 @@ def leggi_targa_da_foto(image_file):
 # --- LOGICA ACCESSO ---
 if st.session_state['user_autenticato'] is None:
     st.title("🔐 Accesso Autoclub Center")
-    u = st.selectbox("Seleziona Operatore", list(CREDENZIALI.keys()))
-    p = st.text_input("Inserisci Password", type="password")
+    u = st.selectbox("Operatore", list(CREDENZIALI.keys()))
+    p = st.text_input("Password", type="password")
     if st.button("Entra"):
         if p == CREDENZIALI[u]:
             st.session_state['user_autenticato'] = u
@@ -116,7 +116,7 @@ else:
             zona = st.selectbox("Assegna Zona", list(ZONE_INFO.keys()))
             note = st.text_area("Note")
 
-            if st.form_submit_button("REGISTRA"):
+            if st.form_submit_button("REGISTRA VETTURA"):
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa):
                     st.warning("⚠️ Formato targa non valido (Esempio: AA123BB)")
                 elif targa and marca_sel and modello_sel:
@@ -128,7 +128,7 @@ else:
                         supabase.table("parco_usato").insert(data).execute()
                         registra_log(targa, "Ingresso", f"Inserita in {zona}", utente_attivo)
                         st.success(f"Vettura {targa} registrata!")
-                else: st.error("Targa, Marca e Modello obbligatori")
+                else: st.error("Campi obbligatori mancanti")
 
     # --- 2. RICERCA / SPOSTA ---
     elif scelta == "🔍 Ricerca/Sposta":
@@ -143,7 +143,7 @@ else:
                 if res and res.data:
                     for v in res.data:
                         with st.expander(f"🚗 {v['targa']} - {v['marca_modello']}", expanded=True):
-                            st.write(f"📍 Zona: **{v['zona_attuale']}** | 🔑 Chiave: **{v['numero_chiave']}**")
+                            st.write(f"📍 Posizione: **{v['zona_attuale']}** | 🔑 Chiave: **{v['numero_chiave']}**")
                             n_z = st.selectbox("Sposta in:", list(ZONE_INFO.keys()), key=v['targa'])
                             c1, c2 = st.columns(2)
                             if c1.button("Sposta", key=f"b_{v['targa']}"):
@@ -154,7 +154,8 @@ else:
                                 supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute()
                                 registra_log(v['targa'], "Consegna", "Uscita definitiva", utente_attivo)
                                 st.rerun()
-                else: st.warning("Vettura non trovata o valore non valido.")
+                else:
+                    st.warning("Vettura non trovata o valore non valido.")
 
     # --- 3. VERIFICA ZONE ---
     elif scelta == "📋 Verifica Zone":
