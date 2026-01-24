@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 from streamlit_autorefresh import st_autorefresh
 import qrcode
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 # --- CONFIGURAZIONE DATABASE ---
 SUPABASE_URL = "https://ihhypwraskzhjovyvwxd.supabase.co"
@@ -17,10 +17,7 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- CREDENZIALI (PIN A 4 CIFRE) ---
-CREDENZIALI = {
-    "Luca Simonini": "2026", 
-    "Ivan Pohorilyak": "1234"
-}
+CREDENZIALI = {"Luca Simonini": "2026", "Ivan Pohorilyak": "1234"}
 TIMEOUT_MINUTI = 10
 
 # --- CONFIGURAZIONE ZONE ---
@@ -72,9 +69,8 @@ def get_colori():
 def suggerisci_colore(targa_input):
     try:
         if len(targa_input) >= 7:
-            res = supabase.table("parco_usato").select("colore").eq("targa", targa_input).order("data_ingresso", desc=True).limit(1).execute()
-            if res.data:
-                return str(res.data[0]['colore']).capitalize()
+            res = supabase.table("parco_usato").select("colore").eq("targa", targa_input).order("created_at", desc=True).limit(1).execute()
+            if res.data: return str(res.data[0]['colore']).capitalize()
         return None
     except: return None
 
@@ -83,8 +79,7 @@ def get_marche():
         res = supabase.table("parco_usato").select("marca_modello").execute()
         marche = set()
         for r in res.data:
-            if r.get("marca_modello"):
-                marche.add(r["marca_modello"].split()[0].capitalize())
+            if r.get("marca_modello"): marche.add(r["marca_modello"].split()[0].capitalize())
         return sorted(marche)
     except: return []
 
@@ -106,8 +101,7 @@ def leggi_qr_zona(image_file):
         img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
         detector = cv2.QRCodeDetector()
         data, _, _ = detector.detectAndDecode(img)
-        if data.startswith("ZONA|"):
-            return data.replace("ZONA|", "").strip()
+        if data.startswith("ZONA|"): return data.replace("ZONA|", "").strip()
         return ""
     except: return ""
 
@@ -116,8 +110,7 @@ controllo_timeout()
 # --- LOGICA ACCESSO ---
 if st.session_state['user_autenticato'] is None:
     st.title("🔐 Accesso Autoclub Center")
-    lista_utenti = list(CREDENZIALI.keys())
-    u = st.selectbox("Seleziona Operatore", lista_utenti)
+    u = st.selectbox("Seleziona Operatore", list(CREDENZIALI.keys()))
     p = st.text_input("Inserisci PIN (4 cifre)", type="password")
     if st.button("ACCEDI"):
         if p == CREDENZIALI[u]:
@@ -225,7 +218,7 @@ else:
                                 st.rerun()
                 else: st.warning("Vettura non trovata.")
 
-    # --- 3. MODIFICA (FIX FEEDBACK SALVATAGGIO) ---
+    # --- 3. MODIFICA ---
     elif scelta == "✏️ Modifica":
         aggiorna_attivita()
         st.subheader("Correzione Dati Vettura")
@@ -253,10 +246,8 @@ else:
                             upd = {"targa": nuova_targa, "marca_modello": nuova_marca_mod, "colore": nuovo_colore, "km": nuovi_km, "numero_chiave": nuova_chiave, "zona_attuale": nuova_zona, "note": nuove_note}
                             supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute()
                             registra_log(nuova_targa, "Modifica", f"Dati corretti da {utente_attivo}", utente_attivo)
-                            
-                            # --- FEEDBACK SALVATAGGIO ---
                             st.success("✅ Salvataggio avvenuto con successo!")
-                            time.sleep(1) # Pausa per permettere la lettura
+                            time.sleep(1)
                             st.rerun()
                 else: st.warning("Vettura non trovata.")
 
@@ -291,11 +282,21 @@ else:
             df['created_at'] = pd.to_datetime(df['created_at']).dt.strftime('%d/%m/%Y %H:%M:%S')
             st.dataframe(df[["created_at", "targa", "azione", "dettaglio", "utente"]], use_container_width=True)
 
-    # --- 🖨️ STAMPA QR ---
-    elif scelta == "🖨️ Stampa QR":
-        z_sel = st.selectbox("Seleziona Zona", list(ZONE_INFO.keys()))
-        qr = qrcode.make(f"ZONA|{z_sel}")
-        buf = BytesIO()
-        qr.save(buf, format="PNG")
-        st.image(buf.getvalue(), caption=f"QR {z_sel}", width=300)
-        st.download_button("📥 Scarica QR", buf.getvalue(), f"QR_{z_sel}.png")
+    # --- 🖨️ STAMPA QR (CON ETICHETTA) ---
+    if scelta == "🖨️ Stampa QR":
+        st.subheader("Generatore Cartelli Zone")
+        z_sel = st.selectbox("Seleziona la zona da stampare", list(ZONE_INFO.keys()))
+        if z_sel:
+            qr = qrcode.QRCode(version=1, box_size=10, border=4)
+            qr.add_data(f"ZONA|{z_sel}")
+            qr.make(fit=True)
+            qr_img = qr.make_image(fill_color="black", back_color="white").convert('RGB')
+            w, h = qr_img.size
+            new_img = Image.new('RGB', (w, h + 50), 'white')
+            new_img.paste(qr_img, (0, 0))
+            draw = ImageDraw.Draw(new_img)
+            draw.text((w/2 - 60, h + 10), f"ZONA: {z_sel.upper()}", fill="black")
+            buf = BytesIO()
+            new_img.save(buf, format="PNG")
+            st.image(buf.getvalue(), caption=f"Anteprima: {z_sel}", width=350)
+            st.download_button(label=f"📥 Scarica Cartello {z_sel}", data=buf.getvalue(), file_name=f"QR_{z_sel}.png", mime="image/png")
