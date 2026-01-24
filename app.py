@@ -18,7 +18,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- CREDENZIALI ---
 CREDENZIALI = {"Luca Simonini": "luca2026", "Ivan Pohorilyak": "ivan2026"}
-TIMEOUT_MINUTI = 15
+TIMEOUT_MINUTI = 10
 
 # --- CONFIGURAZIONE ZONE ---
 ZONE_INFO = {
