@@ -107,7 +107,7 @@ def leggi_qr_zona(image_file):
 
 controllo_timeout()
 
-# --- LOGICA ACCESSO (FIX LOGIN VUOTO) ---
+# --- LOGICA ACCESSO (FIX LOGIN VUOTO) --- [cite: 2026-01-02]
 if st.session_state['user_autenticato'] is None:
     st.title("🔐 Accesso Autoclub Center")
     opzioni_utenti = ["- Seleziona -"] + list(CREDENZIALI.keys())
@@ -288,7 +288,7 @@ else:
             df['created_at'] = pd.to_datetime(df['created_at']).dt.strftime('%d/%m/%Y %H:%M:%S')
             st.dataframe(df[["created_at", "targa", "azione", "dettaglio", "utente"]], use_container_width=True)
 
-    # --- 🖨️ STAMPA QR (CON ETICHETTA) ---
+    # --- 🖨️ STAMPA QR (VISIBILITÀ MIGLIORATA) --- [cite: 2026-01-02]
     if scelta == "🖨️ Stampa QR":
         st.subheader("Generatore Cartelli Zone")
         z_sel = st.selectbox("Seleziona la zona da stampare", list(ZONE_INFO.keys()))
@@ -298,11 +298,19 @@ else:
             qr.make(fit=True)
             qr_img = qr.make_image(fill_color="black", back_color="white").convert('RGB')
             w, h = qr_img.size
-            new_img = Image.new('RGB', (w, h + 50), 'white')
+            
+            # Aumentato spazio inferiore per testo più grande
+            new_img = Image.new('RGB', (w, h + 100), 'white')
             new_img.paste(qr_img, (0, 0))
             draw = ImageDraw.Draw(new_img)
-            draw.text((w/2 - 60, h + 10), f"ZONA: {z_sel.upper()}", fill="black")
+            
+            # Caricamento font o fallback su testo più grande e centrato
+            text_to_print = f"ZONA: {z_sel.upper()}"
+            
+            # Calcolo posizione per centrare la scritta
+            draw.text((w/2 - 110, h + 30), text_to_print, fill="black", font_size=40)
+            
             buf = BytesIO()
             new_img.save(buf, format="PNG")
-            st.image(buf.getvalue(), caption=f"Anteprima: {z_sel}", width=350)
+            st.image(buf.getvalue(), caption=f"Anteprima Cartello: {z_sel}", width=400)
             st.download_button(label=f"📥 Scarica Cartello {z_sel}", data=buf.getvalue(), file_name=f"QR_{z_sel}.png", mime="image/png")
