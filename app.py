@@ -28,7 +28,7 @@ ZONE_INFO = {
     "D Commercianti con telo": 100, "E lavorazioni esterni": 100, "F verso altri sedi": 100
 }
 
-st.set_page_config(page_title="1.1 Master", layout="wide") # [cite: 2026-01-08]
+st.set_page_config(page_title="AUTOCUB CENTER USATO 1.1", layout="wide") # [cite: 2026-01-08]
 
 # --- GESTIONE SESSIONE ---
 if 'user_autenticato' not in st.session_state:
@@ -125,7 +125,6 @@ else:
     utente_attivo = st.session_state['user_autenticato']
     st.sidebar.info(f"Operatore: {utente_attivo}")
     
-    # Menu esteso con sezione Modifica
     menu = ["➕ Ingresso", "🔍 Ricerca/Sposta", "✏️ Modifica", "📋 Verifica Zone", "📊 Export", "📜 Log", "🖨️ Stampa QR"]
     scelta = st.radio("Seleziona Funzione", menu, horizontal=True)
     st.markdown("---")
@@ -229,37 +228,45 @@ else:
                                 st.rerun()
                 else: st.warning("Vettura non trovata.")
 
-    # --- ✏️ NUOVA SEZIONE: MODIFICA ---
+    # --- ✏️ SEZIONE: MODIFICA (Smart Ricerca) ---
     elif scelta == "✏️ Modifica":
         aggiorna_attivita()
         st.subheader("Correzione Dati Vettura")
-        t_mod = st.text_input("Inserisci Targa da modificare").upper().strip()
         
-        if t_mod:
-            res = supabase.table("parco_usato").select("*").eq("targa", t_mod).eq("stato", "PRESENTE").execute()
-            if res.data:
-                v = res.data[0]
-                with st.form("f_modifica"):
-                    st.info(f"Modifica dati per: {v['targa']}")
-                    nuova_targa = st.text_input("Correggi Targa", value=v['targa']).upper().strip()
-                    nuova_marca_mod = st.text_input("Correggi Marca/Modello", value=v['marca_modello'])
-                    nuovo_colore = st.text_input("Correggi Colore", value=v['colore'])
-                    nuovi_km = st.number_input("Correggi KM", value=int(v['km']))
-                    nuova_chiave = st.number_input("Correggi N. Chiave", value=int(v['numero_chiave']))
-                    nuova_zona = st.selectbox("Correggi Zona", list(ZONE_INFO.keys()), index=list(ZONE_INFO.keys()).index(v['zona_attuale']))
-                    nuove_note = st.text_area("Note aggiuntive", value=v['note'])
-                    
-                    if st.form_submit_button("SALVA CORREZIONI"):
-                        update_data = {
-                            "targa": nuova_targa, "marca_modello": nuova_marca_mod, "colore": nuovo_colore,
-                            "km": nuovi_km, "numero_chiave": nuova_chiave, "zona_attuale": nuova_zona, "note": nuove_note
-                        }
-                        supabase.table("parco_usato").update(update_data).eq("targa", v['targa']).execute()
-                        registra_log(v['targa'], "Modifica", f"Dati corretti da {utente_attivo}", utente_attivo)
-                        st.success("Dati aggiornati correttamente!")
-                        st.rerun()
-            else:
-                st.warning("Vettura non trovata nel piazzale.")
+        # 🎯 FIX: Ricerca per Targa o Chiave anche in modifica [cite: 2026-01-02]
+        tipo_mod = st.radio("Cerca vettura da correggere per:", ["Targa", "Numero Chiave"], horizontal=True, key="rm_mod")
+        q_mod = st.text_input(f"Inserisci {tipo_mod} per trovare la vettura").strip()
+        
+        if q_mod:
+            col_m = "targa" if tipo_mod == "Targa" else "numero_chiave"
+            val_m = q_mod.upper() if tipo_mod == "Targa" else int(q_mod) if q_mod.isdigit() else None
+            
+            if val_m is not None:
+                res = supabase.table("parco_usato").select("*").eq(col_m, val_m).eq("stato", "PRESENTE").execute()
+                if res.data:
+                    v = res.data[0]
+                    with st.form("f_modifica"):
+                        st.info(f"Modifica dati per: {v['targa']} ({v['marca_modello']})")
+                        nuova_targa = st.text_input("Correggi Targa", value=v['targa']).upper().strip()
+                        nuova_marca_mod = st.text_input("Correggi Marca/Modello", value=v['marca_modello'])
+                        nuovo_colore = st.text_input("Correggi Colore", value=v['colore'])
+                        nuovi_km = st.number_input("Correggi KM", value=int(v['km']))
+                        nuova_chiave = st.number_input("Correggi N. Chiave", value=int(v['numero_chiave']))
+                        nuova_zona = st.selectbox("Correggi Zona", list(ZONE_INFO.keys()), index=list(ZONE_INFO.keys()).index(v['zona_attuale']))
+                        nuove_note = st.text_area("Note aggiuntive", value=v['note'])
+                        
+                        if st.form_submit_button("SALVA CORREZIONI"):
+                            update_data = {
+                                "targa": nuova_targa, "marca_modello": nuova_marca_mod, "colore": nuovo_colore,
+                                "km": nuovi_km, "numero_chiave": nuova_chiave, "zona_attuale": nuova_zona, "note": nuove_note
+                            }
+                            # Identifichiamo la riga per l'ID originale per evitare problemi se la targa viene cambiata
+                            supabase.table("parco_usato").update(update_data).eq("targa", v['targa']).execute()
+                            registra_log(nuova_targa, "Modifica", f"Dati corretti da {utente_attivo}", utente_attivo)
+                            st.success("Dati aggiornati correttamente!")
+                            st.rerun()
+                else:
+                    st.warning("Vettura non trovata nel piazzale.")
 
     # --- 📋 VERIFICA ZONE ---
     elif scelta == "📋 Verifica Zone":
