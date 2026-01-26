@@ -40,6 +40,7 @@ if 'zona_rilevata' not in st.session_state:
 if 'zona_rilevata_sposta' not in st.session_state:
     st.session_state['zona_rilevata_sposta'] = ""
 
+# Camera OFF di default
 if 'camera_attiva' not in st.session_state:
     st.session_state['camera_attiva'] = False
 
@@ -152,8 +153,6 @@ else:
     if scelta == "➕ Ingresso":
         aggiorna_attivita()
         st.subheader("Registrazione Nuova Vettura")
-        st.session_state.camera_attiva = st.checkbox("📸 Attiva Scanner per zona", value=st.session_state.camera_attiva, key="in_cam_check")
-        
         foto_z = None
         if st.session_state.camera_attiva:
             foto_z = st.camera_input("Scansiona QR della Zona (OBBLIGATORIO)", key="cam_in")
@@ -164,7 +163,7 @@ else:
                     st.success(f"Zona rilevata: {z_letta}")
                 else: st.error("QR non valido")
         else:
-            st.warning("⚠️ Scanner disattivato.")
+            st.warning("⚠️ Scanner disattivato dalla Sidebar.")
 
         zona_attuale = st.session_state.get("zona_rilevata", "") if st.session_state.camera_attiva else ""
         with st.form("f_ingresso", clear_on_submit=True):
@@ -206,14 +205,13 @@ else:
     elif scelta == "🔍 Ricerca/Sposta":
         aggiorna_attivita()
         st.subheader("Ricerca e Spostamento")
-        st.session_state.camera_attiva = st.checkbox("📸 Attiva Scanner per nuova zona", value=st.session_state.camera_attiva, key="sp_cam_check")
         if st.session_state.camera_attiva:
             foto_sp = st.camera_input("Scansiona QR Nuova Zona", key="cam_sp")
             if foto_sp:
                 n_z = leggi_qr_zona(foto_sp)
                 if n_z in ZONE_INFO:
                     st.session_state["zona_rilevata_sposta"] = n_z
-                    st.info(f"Nuova zona: {n_z}")
+                    st.info(f"Destinazione: {n_z}")
         else: st.warning("⚠️ Scanner disattivato.")
 
         tipo = st.radio("Cerca per:", ["Targa", "Numero Chiave"], horizontal=True)
@@ -239,7 +237,7 @@ else:
                             conf = st.checkbox("⚠️ Confermo CONSEGNA", key=f"conf_{v['targa']}")
                             if c2.button("🔴 CONSEGNA", key=f"d_{v['targa']}", disabled=not conf):
                                 supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute()
-                                registra_log(v['targa'], "Consegna", "Uscita definitiva", utente_attivo)
+                                registra_log(v['targa'], "Consegna", "Uscita", utente_attivo)
                                 st.rerun()
 
     # --- 10. SEZIONE MODIFICA ---
@@ -255,6 +253,7 @@ else:
             if res.data:
                 v = res.data[0]
                 with st.form("f_mod"):
+                    st.info(f"Modifica: {v['targa']}")
                     upd = {
                         "targa": st.text_input("Targa", value=v['targa']).upper().strip(),
                         "marca_modello": st.text_input("Modello", value=v['marca_modello']),
@@ -276,28 +275,31 @@ else:
                         time.sleep(1)
                         st.rerun()
 
-    # --- 11. ALTRE FUNZIONI (PATCH EXPORT DEFINITIVA) --- [cite: 2026-01-02]
+    # --- 11. ALTRE FUNZIONI ---
     elif scelta == "📋 Verifica Zone":
         z_sel = st.selectbox("Seleziona Zona", list(ZONE_INFO.keys()))
         res = supabase.table("parco_usato").select("*").eq("zona_attuale", z_sel).eq("stato", "PRESENTE").execute()
         st.metric(f"Veicoli", len(res.data))
         if res.data: st.dataframe(pd.DataFrame(res.data)[["targa", "marca_modello", "colore"]], use_container_width=True)
 
+    # --- FIX 📊 Export DEFINITIVO --- [cite: 2026-01-02]
     elif scelta == "📊 Export":
         aggiorna_attivita()
-        res = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE").execute()
-        if res.data:
-            df = pd.DataFrame(res.data)
-            # Format data se esiste [cite: 2026-01-02]
-            if "created_at" in df.columns:
-                df["created_at"] = pd.to_datetime(df["created_at"]).dt.strftime("%d/%m/%Y %H:%M")
-            # Pulizia colonne
-            df = df.drop(columns=["id", "stato"], errors="ignore")
-            out = BytesIO()
-            with pd.ExcelWriter(out, engine="xlsxwriter") as w:
-                df.to_excel(w, index=False)
-            st.download_button("📥 Scarica Report", out.getvalue(), f"Piazzale_{datetime.now().strftime('%d_%m')}.xlsx")
-        else: st.error("Nessun dato presente.")
+        try:
+            res = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE").execute()
+            if not res.data:
+                st.warning("Nessuna vettura da esportare.")
+            else:
+                df = pd.DataFrame(res.data)
+                if "created_at" in df.columns:
+                    df["created_at"] = pd.to_datetime(df["created_at"]).dt.strftime("%d/%m/%Y %H:%M")
+                df = df.drop(columns=["id", "stato"], errors="ignore")
+                out = BytesIO()
+                with pd.ExcelWriter(out, engine="xlsxwriter") as w:
+                    df.to_excel(w, index=False)
+                st.download_button("📥 Scarica Report", out.getvalue(), f"Piazzale_{datetime.now().strftime('%d_%m')}.xlsx")
+        except Exception as e:
+            st.error("❌ Errore durante l'export.")
 
     elif scelta == "📜 Log":
         st_autorefresh(interval=10000, key="log_refresh")
