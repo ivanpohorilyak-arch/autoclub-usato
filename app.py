@@ -10,6 +10,7 @@ import numpy as np
 from streamlit_autorefresh import st_autorefresh
 import qrcode
 from PIL import Image, ImageDraw
+from pyzbar.pyzbar import decode
 
 # --- 1. CONFIGURAZIONE DATABASE ---
 SUPABASE_URL = "https://ihhypwraskzhjovyvwxd.supabase.co"
@@ -28,7 +29,7 @@ ZONE_INFO = {
     "D Commercianti con telo": 100, "E lavorazioni esterni": 100, "F verso altri sedi": 100
 }
 
-# PATCH QR 1: Normalizzazione Zone [cite: 2026-01-02]
+# Normalizzazione Zone per confronto robusto
 ZONE_INFO_NORM = {
     k.strip().upper(): v for k, v in ZONE_INFO.items()
 }
@@ -75,17 +76,23 @@ def suggerisci_colore(targa_input):
         return None
     except: return None
 
-# PATCH QR 2: Normalizzazione lettura [cite: 2026-01-02]
+# 3️⃣ SOSTITUZIONE FUNZIONE LEGGI QR CON PYZBAR
 def leggi_qr_zona(image_file):
     try:
-        file_bytes = np.asarray(bytearray(image_file.read()), dtype=np.uint8)
-        img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-        detector = cv2.QRCodeDetector()
-        data, _, _ = detector.detectAndDecode(img)
+        img = Image.open(image_file).convert("RGB")
+        decoded = decode(img)
+
+        if not decoded:
+            return ""
+
+        data = decoded[0].data.decode("utf-8")
+
         if data.startswith("ZONA|"):
             return data.replace("ZONA|", "").strip().upper()
+
         return ""
-    except: return ""
+    except Exception as e:
+        return ""
 
 controllo_timeout()
 
@@ -136,7 +143,6 @@ else:
             foto_z = st.camera_input("Scansiona QR della Zona (OBBLIGATORIO)", key="cam_in")
             if foto_z:
                 z_letta = leggi_qr_zona(foto_z)
-                # PATCH QR 3: Confronto normalizzato [cite: 2026-01-02]
                 if z_letta in ZONE_INFO_NORM:
                     zona_originale = next(k for k in ZONE_INFO.keys() if k.strip().upper() == z_letta)
                     st.session_state["zona_rilevata"] = zona_originale
