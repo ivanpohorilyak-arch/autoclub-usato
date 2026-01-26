@@ -8,3 +8,4 @@ xlsxwriter
 opencv-python-headless
 pytesseract
 numpy
+pyzbar
