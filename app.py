@@ -36,7 +36,7 @@ ZONE_INFO = {
     "Z11": "Verso altre sedi"
 }
 
-st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1", layout="wide") # [cite: 2026-01-08]
+st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1", layout="wide") 
 
 # --- 4. GESTIONE SESSIONE ---
 if 'user_autenticato' not in st.session_state:
@@ -188,13 +188,13 @@ else:
             
             km = st.number_input("Chilometri", min_value=0, step=100)
             n_chiave = st.number_input("N. Chiave", min_value=0, step=1)
-            if n_chiave == 0: st.info("🤝 Valore 0 = Vettura destinata a COMMERCIANTE") [cite: 2026-01-02]
+            if n_chiave == 0: st.info("🤝 Valore 0 = Vettura destinata a COMMERCIANTE")
             note = st.text_area("Note")
 
             if st.form_submit_button("REGISTRA VETTURA", disabled=not zona_attuale):
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa): st.warning("Targa non valida")
                 else:
-                    # Blocco duplicati [cite: 2025-12-30]
+                    # Blocco duplicati 
                     check = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute()
                     if check.data: st.error("Vettura già presente nel piazzale!")
                     else:
