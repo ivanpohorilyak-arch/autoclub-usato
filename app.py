@@ -21,12 +21,16 @@ CREDENZIALI = {"Luca Simonini": "2026", "Ivan Pohorilyak": "1234", "Abdul": "000
 TIMEOUT_MINUTI = 15
 
 # --- 3. CONFIGURAZIONE ZONE ---
-# [cite: 2026-01-02] - Le chiavi qui sotto devono essere identiche a quelle stampate sui QR
 ZONE_INFO = {
     "Deposito N.9": 100, "Deposito N.7": 100, "Deposito N.6 (Lavaggisti)": 100, 
     "Deposito unificato 1 e 2": 100, "Showroom": 100, "A Vetture vendute": 100, 
     "B Lavaggio Esterno": 100, "C Commercianti senza telo": 100, 
     "D Commercianti con telo": 100, "E lavorazioni esterni": 100, "F verso altri sedi": 100
+}
+
+# PATCH QR 1: Normalizzazione Zone [cite: 2026-01-02]
+ZONE_INFO_NORM = {
+    k.strip().upper(): v for k, v in ZONE_INFO.items()
 }
 
 st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1", layout="wide")
@@ -71,15 +75,15 @@ def suggerisci_colore(targa_input):
         return None
     except: return None
 
+# PATCH QR 2: Normalizzazione lettura [cite: 2026-01-02]
 def leggi_qr_zona(image_file):
     try:
         file_bytes = np.asarray(bytearray(image_file.read()), dtype=np.uint8)
         img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
         detector = cv2.QRCodeDetector()
         data, _, _ = detector.detectAndDecode(img)
-        # Normalizzazione: rimuove spazi e trasforma in maiuscolo per confronto robusto
         if data.startswith("ZONA|"):
-            return data.replace("ZONA|", "").strip()
+            return data.replace("ZONA|", "").strip().upper()
         return ""
     except: return ""
 
@@ -119,6 +123,10 @@ else:
     scelta = st.radio("Seleziona Funzione", menu, horizontal=True)
     st.markdown("---")
 
+    if scelta not in ["➕ Ingresso", "🔍 Ricerca/Sposta"]:
+        st.session_state["zona_rilevata"] = ""
+        st.session_state["zona_rilevata_sposta"] = ""
+
     # --- 8. SEZIONE INGRESSO ---
     if scelta == "➕ Ingresso":
         aggiorna_attivita()
@@ -128,9 +136,11 @@ else:
             foto_z = st.camera_input("Scansiona QR della Zona (OBBLIGATORIO)", key="cam_in")
             if foto_z:
                 z_letta = leggi_qr_zona(foto_z)
-                if z_letta in ZONE_INFO:
-                    st.session_state["zona_rilevata"] = z_letta
-                    st.success(f"Zona rilevata: {z_letta}")
+                # PATCH QR 3: Confronto normalizzato [cite: 2026-01-02]
+                if z_letta in ZONE_INFO_NORM:
+                    zona_originale = next(k for k in ZONE_INFO.keys() if k.strip().upper() == z_letta)
+                    st.session_state["zona_rilevata"] = zona_originale
+                    st.success(f"Zona rilevata: {zona_originale}")
                 else: st.error(f"QR non valido o Zona '{z_letta}' non censita")
         else:
             st.warning("⚠️ Scanner disattivato dalla Sidebar.")
@@ -141,7 +151,6 @@ else:
             else: st.info(f"📍 Zona: **{zona_attuale}**")
             targa = st.text_input("TARGA").upper().strip()
             
-            # Auto-apprendimento colore
             colore_suggerito = suggerisci_colore(targa) if targa else None
             if colore_suggerito: st.info(f"🎨 Suggerito: **{colore_suggerito}**")
             
@@ -152,7 +161,6 @@ else:
             km = st.number_input("Chilometri", min_value=0, step=100)
             n_chiave = st.number_input("N. Chiave", min_value=0, step=1)
             
-            # --- FEEDBACK BUSINESS RULE --- [cite: 2026-01-02]
             if n_chiave == 0: 
                 st.info("🤝 Valore 0 = Vettura destinata a COMMERCIANTE")
             
@@ -162,7 +170,6 @@ else:
                 aggiorna_attivita()
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa): st.warning("Targa non valida")
                 else:
-                    # Blocco duplicati [cite: 2025-12-30]
                     check = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute()
                     if check.data: st.error("Vettura già presente!")
                     else:
@@ -181,10 +188,12 @@ else:
         if st.session_state.camera_attiva:
             foto_sp = st.camera_input("Scansiona QR Nuova Zona", key="cam_sp")
             if foto_sp:
-                n_z = leggi_qr_zona(foto_sp)
-                if n_z in ZONE_INFO:
-                    st.session_state["zona_rilevata_sposta"] = n_z
-                    st.info(f"Destinazione: {n_z}")
+                n_z_letta = leggi_qr_zona(foto_sp)
+                if n_z_letta in ZONE_INFO_NORM:
+                    zona_originale_sp = next(k for k in ZONE_INFO.keys() if k.strip().upper() == n_z_letta)
+                    st.session_state["zona_rilevata_sposta"] = zona_originale_sp
+                    st.info(f"Destinazione: {zona_originale_sp}")
+                else: st.error(f"QR non valido o Zona non censita")
         else: st.warning("⚠️ Scanner disattivato.")
 
         tipo = st.radio("Cerca per:", ["Targa", "Numero Chiave"], horizontal=True)
@@ -226,7 +235,6 @@ else:
             if res.data:
                 v = res.data[0]
                 with st.form("f_mod"):
-                    st.info(f"Modifica: {v['targa']}")
                     upd = {
                         "targa": st.text_input("Targa", value=v['targa']).upper().strip(),
                         "colore": st.text_input("Colore", value=v['colore']).strip().capitalize(),
@@ -238,14 +246,10 @@ else:
                     if st.form_submit_button("SALVA"):
                         if upd["targa"] != v["targa"]:
                             dup = supabase.table("parco_usato").select("targa").eq("targa", upd["targa"]).eq("stato", "PRESENTE").execute()
-                            if dup.data:
-                                st.error("❌ Targa già esistente!")
-                                st.stop()
+                            if dup.data: st.error("❌ Targa già esistente!"); st.stop()
                         supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute()
                         registra_log(upd["targa"], "Modifica", "Correzione manuale", utente_attivo)
-                        st.success("✅ Salvataggio avvenuto!")
-                        time.sleep(1)
-                        st.rerun()
+                        st.success("✅ Salvataggio avvenuto!"); time.sleep(1); st.rerun()
 
     # --- 11. ALTRE FUNZIONI ---
     elif scelta == "📋 Verifica Zone":
@@ -258,15 +262,14 @@ else:
         aggiorna_attivita()
         try:
             res = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE").execute()
-            if not res.data: st.warning("Nessun dato.")
-            else:
+            if res.data:
                 df = pd.DataFrame(res.data)
-                df["created_at"] = pd.to_datetime(df["created_at"]).dt.strftime("%d/%m/%Y %H:%M")
+                if "created_at" in df.columns: df["created_at"] = pd.to_datetime(df["created_at"]).dt.strftime("%d/%m/%Y %H:%M")
                 df = df.drop(columns=["id", "stato"], errors="ignore")
                 out = BytesIO()
                 with pd.ExcelWriter(out, engine="xlsxwriter") as w: df.to_excel(w, index=False)
                 st.download_button("📥 Scarica Report", out.getvalue(), f"Piazzale_{datetime.now().strftime('%d_%m')}.xlsx")
-        except: st.error("Errore Export")
+        except: st.error("❌ Errore durante l'export.")
 
     elif scelta == "📜 Log":
         st_autorefresh(interval=10000, key="log_refresh")
