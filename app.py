@@ -28,7 +28,6 @@ ZONE_INFO = {
     "D Commercianti con telo": 100, "E lavorazioni esterni": 100, "F verso altri sedi": 100
 }
 
-# Mappa normalizzata per confronto robusto [cite: 2026-01-02]
 ZONE_INFO_NORM = {k.strip().upper(): v for k, v in ZONE_INFO.items()}
 
 st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1", layout="wide")
@@ -42,6 +41,8 @@ if 'zona_rilevata' not in st.session_state:
     st.session_state['zona_rilevata'] = ""
 if 'zona_rilevata_sposta' not in st.session_state:
     st.session_state['zona_rilevata_sposta'] = ""
+
+# Camera OFF di default all'inizio [cite: 2026-01-02]
 if 'camera_attiva' not in st.session_state:
     st.session_state['camera_attiva'] = False
 
@@ -72,7 +73,6 @@ def suggerisci_colore(targa_input):
         return None
     except: return None
 
-# 2️⃣ NUOVA FUNZIONE LEGGI QR ROBUSTA [cite: 2026-01-02]
 def leggi_qr_zona(image_file):
     try:
         file_bytes = np.asarray(bytearray(image_file.read()), dtype=np.uint8)
@@ -100,19 +100,15 @@ if st.session_state['user_autenticato'] is None:
             st.rerun()
         else: st.error("Dati non validi")
 else:
-    # --- 7. SIDEBAR ---
+    # --- 7. SIDEBAR (UNICO PUNTO DI CONTROLLO CAMERA) --- [cite: 2026-01-02]
     utente_attivo = st.session_state['user_autenticato']
     with st.sidebar:
         st.info(f"👤 Operatore: {utente_attivo}")
-        def toggle_camera():
-            if not st.session_state.camera_attiva:
-                st.session_state["zona_rilevata"] = ""
-                st.session_state["zona_rilevata_sposta"] = ""
-                st.session_state.pop("cam_in", None)
-                st.session_state.pop("cam_sp", None)
-
+        
+        # 🔧 FIX 2: UNICO CHECKBOX [cite: 2026-01-02]
         st.sidebar.markdown("### 📷 Scanner QR")
-        st.sidebar.checkbox("Attiva fotocamera", value=st.session_state.camera_attiva, key="camera_attiva", on_change=toggle_camera)
+        st.checkbox("Attiva scanner fotocamera", key="camera_attiva")
+        
         if st.button("Log-out"):
             st.session_state.clear()
             st.rerun()
@@ -129,22 +125,22 @@ else:
     if scelta == "➕ Ingresso":
         aggiorna_attivita()
         st.subheader("Registrazione Nuova Vettura")
-        st.session_state.camera_attiva = st.checkbox("📸 Scannerizza zona", value=st.session_state.camera_attiva, key="in_cam_chk")
         
+        # 🔧 FIX 3: USO IN LETTURA [cite: 2026-01-02]
         foto_z = None
         if st.session_state.camera_attiva:
             foto_z = st.camera_input("Scansiona QR della Zona (OBBLIGATORIO)", key="cam_in")
             if foto_z:
                 z_letta = leggi_qr_zona(foto_z)
-                # 🧩 PATCH UX [cite: 2026-01-02]
                 if not z_letta:
-                    st.error("❌ QR non leggibile. Avvicina il codice, evita riflessi o usa QR stampato.")
+                    st.error("❌ QR non leggibile. Avvicina il codice o evita riflessi.")
                 elif z_letta in ZONE_INFO_NORM:
                     orig = next(k for k in ZONE_INFO.keys() if k.strip().upper() == z_letta)
                     st.session_state["zona_rilevata"] = orig
                     st.success(f"Zona rilevata: {orig}")
                 else: st.error(f"Zona '{z_letta}' non censita.")
-        else: st.warning("⚠️ Scanner disattivato.")
+        else:
+            st.warning("⚠️ Scanner disattivato dalla Sidebar.")
 
         zona_attuale = st.session_state.get("zona_rilevata", "") if st.session_state.camera_attiva else ""
         with st.form("f_ingresso", clear_on_submit=True):
@@ -179,7 +175,6 @@ else:
     elif scelta == "🔍 Ricerca/Sposta":
         aggiorna_attivita()
         st.subheader("Ricerca e Spostamento")
-        st.session_state.camera_attiva = st.checkbox("📸 Scannerizza nuova zona", value=st.session_state.camera_attiva, key="sp_cam_chk")
         
         if st.session_state.camera_attiva:
             foto_sp = st.camera_input("Scansiona QR Nuova Zona", key="cam_sp")
@@ -192,7 +187,7 @@ else:
                     st.session_state["zona_rilevata_sposta"] = orig_sp
                     st.info(f"Destinazione: {orig_sp}")
                 else: st.error("Zona non censita.")
-        else: st.warning("⚠️ Scanner disattivato.")
+        else: st.warning("⚠️ Scanner disattivato dalla Sidebar.")
 
         tipo = st.radio("Cerca per:", ["Targa", "Numero Chiave"], horizontal=True)
         q = st.text_input(f"Inserisci {tipo}").strip()
@@ -229,7 +224,6 @@ else:
             if res.data:
                 v = res.data[0]
                 with st.form("f_mod"):
-                    st.info(f"Modifica: {v['targa']}")
                     upd = {
                         "targa": st.text_input("Targa", value=v['targa']).upper().strip(),
                         "colore": st.text_input("Colore", value=v['colore']).strip().capitalize(),
