@@ -149,16 +149,18 @@ else:
                 if z_id:
                     st.session_state["zona_id"] = z_id
                     st.session_state["zona_nome"] = ZONE_INFO[z_id]
-                    st.success(f"Zona rilevata: {st.session_state['zona_nome']}")
+                    st.success(f"✅ Zona rilevata: {st.session_state['zona_nome']}")
                 else: st.error("❌ QR non valido")
+        else:
+            st.warning("⚠️ Scanner disattivato dalla Sidebar. Attivalo per leggere la zona.")
 
         with st.form("f_ingresso", clear_on_submit=True):
             if not st.session_state['zona_id']: st.error("❌ Scansione QR Obbligatoria")
-            else: st.info(f"📍 Zona: **{st.session_state['zona_nome']}**")
+            else: st.info(f"📍 Zona selezionata: **{st.session_state['zona_nome']}**")
             
             targa = st.text_input("TARGA").upper().strip()
-            marche = get_marche()
-            m_sel = st.selectbox("Marca", ["Nuova..."] + marche)
+            m_esistenti = get_marche()
+            m_sel = st.selectbox("Marca", ["Nuova..."] + m_esistenti)
             if m_sel == "Nuova...": m_sel = st.text_input("Inserisci Marca").upper()
             mod_esistenti = get_modelli(m_sel) if m_sel != "Nuova..." else []
             mod_sel = st.selectbox("Modello", ["Nuovo..."] + mod_esistenti)
@@ -178,7 +180,7 @@ else:
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa): st.warning("Targa non valida")
                 else:
                     check = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute()
-                    if check.data: st.error("Vettura già presente!")
+                    if check.data: st.error("❌ Vettura già presente!")
                     else:
                         data = {
                             "targa": targa, "marca_modello": f"{m_sel} {mod_sel}".strip(), "colore": colore, 
@@ -188,7 +190,11 @@ else:
                         }
                         supabase.table("parco_usato").insert(data).execute()
                         registra_log(targa, "Ingresso", f"In {st.session_state['zona_nome']}", utente_attivo)
-                        st.success("✅ Registrata!"); st.session_state["zona_id"] = ""; time.sleep(1); st.rerun()
+                        st.success("✅ Vettura registrata correttamente!")
+                        # RESET COMPLETO POST-REGISTRAZIONE [cite: 2026-01-02]
+                        st.session_state["zona_id"] = ""
+                        st.session_state["zona_nome"] = ""
+                        time.sleep(1); st.rerun()
 
     # --- 9. SEZIONE RICERCA / SPOSTA ---
     elif scelta == "🔍 Ricerca/Sposta":
@@ -201,8 +207,10 @@ else:
                 if z_id_sp:
                     st.session_state["zona_id_sposta"] = z_id_sp
                     st.session_state["zona_nome_sposta"] = ZONE_INFO[z_id_sp]
-                    st.info(f"Destinazione: {st.session_state['zona_nome_sposta']}")
+                    st.info(f"✅ Destinazione rilevata: {st.session_state['zona_nome_sposta']}")
                 else: st.error("❌ QR non valido")
+        else:
+            st.warning("⚠️ Scanner disattivato dalla Sidebar. Attivalo per spostare il veicolo.")
 
         tipo = st.radio("Cerca per:", ["Targa", "Numero Chiave"], horizontal=True)
         q = st.text_input("Inserisci valore").strip()
@@ -214,7 +222,7 @@ else:
                 if res.data:
                     for v in res.data:
                         with st.expander(f"🚗 {v['targa']} - {v['marca_modello']}", expanded=True):
-                            st.write(f"📍 Posizione: **{v['zona_attuale']}**")
+                            st.write(f"📍 Posizione attuale: **{v['zona_attuale']}**")
                             c1, c2 = st.columns(2)
                             if c1.button("SPOSTA QUI", key=f"b_{v['targa']}", disabled=not st.session_state['zona_id_sposta']):
                                 supabase.table("parco_usato").update({
@@ -222,13 +230,17 @@ else:
                                     "zona_attuale": st.session_state["zona_nome_sposta"]
                                 }).eq("targa", v['targa']).execute()
                                 registra_log(v['targa'], "Spostamento", f"In {st.session_state['zona_nome_sposta']}", utente_attivo)
-                                st.session_state["zona_id_sposta"] = ""; st.success("Spostata!"); time.sleep(1); st.rerun()
-                            conf = st.checkbox("⚠️ Conferma CONSEGNA", key=f"conf_{v['targa']}")
+                                # RESET COMPLETO POST-SPOSTAMENTO [cite: 2026-01-02]
+                                st.session_state["zona_id_sposta"] = ""
+                                st.session_state["zona_nome_sposta"] = ""
+                                st.success("✅ Veicolo spostato!"); time.sleep(1); st.rerun()
+                            conf = st.checkbox("⚠️ Conferma CONSEGNA DEFINITIVA", key=f"conf_{v['targa']}")
                             if c2.button("🔴 CONSEGNA", key=f"d_{v['targa']}", disabled=not conf):
                                 supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute()
-                                registra_log(v['targa'], "Consegna", "Uscita definitiva", utente_attivo); st.rerun()
+                                registra_log(v['targa'], "Consegna", "Uscita definitiva", utente_attivo)
+                                st.success("✅ Veicolo consegnato!"); st.rerun()
 
-    # --- 10. MODIFICA (FIX CORRETTO ID) --- [cite: 2026-01-02]
+    # --- 10. MODIFICA ---
     elif scelta == "✏️ Modifica":
         aggiorna_attivita()
         st.subheader("Correzione Dati")
@@ -242,32 +254,29 @@ else:
                 v = res.data[0]
                 if not v.get("zona_id"): st.warning("⚠️ Zona legacy (senza ID). Consigliata normalizzazione.")
                 with st.form("f_mod"):
-                    # STEP 1: Fix Modifica ID [cite: 2026-01-02]
-                    zona_nome_sel = st.selectbox("Zona", list(ZONE_INFO.values()), index=list(ZONE_INFO.values()).index(v['zona_attuale']) if v['zona_attuale'] in ZONE_INFO.values() else 0)
-                    zona_id_sel = next(k for k, val in ZONE_INFO.items() if val == zona_nome_sel)
-                    
+                    z_nome_sel = st.selectbox("Zona", list(ZONE_INFO.values()), index=list(ZONE_INFO.values()).index(v['zona_attuale']) if v['zona_attuale'] in ZONE_INFO.values() else 0)
+                    z_id_sel = next(k for k, val in ZONE_INFO.items() if val == z_nome_sel)
                     upd = {
                         "targa": st.text_input("Targa", value=v['targa']).upper().strip(),
                         "marca_modello": st.text_input("Modello", value=v['marca_modello']).upper(),
                         "colore": st.text_input("Colore", value=v['colore']).strip().capitalize(),
                         "km": st.number_input("KM", value=int(v['km'])),
                         "numero_chiave": st.number_input("Chiave", value=int(v['numero_chiave'])),
-                        "zona_id": zona_id_sel,
-                        "zona_attuale": zona_nome_sel,
-                        "note": st.text_area("Note", value=v['note'])
+                        "zona_id": z_id_sel, "zona_attuale": z_nome_sel, "note": st.text_area("Note", value=v['note'])
                     }
                     if st.form_submit_button("SALVA"):
                         if upd["targa"] != v["targa"]:
                             dup = supabase.table("parco_usato").select("targa").eq("targa", upd["targa"]).eq("stato", "PRESENTE").execute()
-                            if dup.data: st.error("❌ Targa esistente!"); st.stop()
+                            if dup.data: st.error("❌ Targa già esistente!"); st.stop()
                         supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute()
-                        registra_log(upd["targa"], "Modifica", "Correzione", utente_attivo); st.success("✅ Salvato!"); time.sleep(1); st.rerun()
+                        registra_log(upd["targa"], "Modifica", "Correzione manuale", utente_attivo)
+                        st.success("✅ Modifiche salvate con successo!"); time.sleep(1); st.rerun()
 
-    # --- 11. UTILITY ---
+    # --- 11. ALTRE FUNZIONI ---
     elif scelta == "📋 Verifica Zone":
         z_sel = st.selectbox("Seleziona Zona", list(ZONE_INFO.values()))
         res = supabase.table("parco_usato").select("*").eq("zona_attuale", z_sel).eq("stato", "PRESENTE").execute()
-        st.metric("Veicoli", len(res.data))
+        st.metric("Veicoli totali", len(res.data))
         if res.data: st.dataframe(pd.DataFrame(res.data)[["targa", "marca_modello", "colore"]], use_container_width=True)
 
     elif scelta == "📊 Export":
@@ -280,8 +289,8 @@ else:
                 df = df.drop(columns=["id", "stato"], errors="ignore")
                 out = BytesIO()
                 with pd.ExcelWriter(out, engine="xlsxwriter") as w: df.to_excel(w, index=False)
-                st.download_button("📥 Scarica Report", out.getvalue(), f"Piazzale_{datetime.now().strftime('%d_%m')}.xlsx")
-        except: st.error("❌ Errore Export")
+                st.download_button("📥 Scarica Report Excel", out.getvalue(), f"Piazzale_{datetime.now().strftime('%d_%m')}.xlsx")
+        except: st.error("❌ Errore durante l'esportazione.")
 
     elif scelta == "📜 Log":
         st_autorefresh(interval=10000, key="log_ref")
