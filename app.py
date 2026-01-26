@@ -112,7 +112,7 @@ controllo_timeout()
 
 # --- 6. LOGIN ---
 if st.session_state['user_autenticato'] is None:
-    st.title("🔐 Accesso Autoclub Center")
+    st.title("🔐 Accesso Autoclub Center Usato")
     opzioni_utenti = ["- Seleziona -"] + list(CREDENZIALI.keys())
     u = st.selectbox("Operatore", opzioni_utenti)
     p = st.text_input("PIN", type="password")
@@ -173,7 +173,7 @@ else:
             
             km = st.number_input("Chilometri", min_value=0, step=100)
             n_chiave = st.number_input("N. Chiave", min_value=0, step=1)
-            if n_chiave == 0: st.info("🤝 Valore 0 = COMMERCIANTE")
+            if n_chiave == 0: st.info("🤝 Valore 0 = Vetture destinati al commercianti")
             note = st.text_area("Note")
 
             if st.form_submit_button("REGISTRA", disabled=not st.session_state['zona_id']):
@@ -231,7 +231,7 @@ else:
                                 st.session_state["zona_id_sposta"] = ""; st.session_state["zona_nome_sposta"] = ""
                                 st.success("✅ Spostata!"); time.sleep(1); st.rerun()
 
-                            # PATCH ULTRA-BLINDATA CHIAVE CONFERMA [cite: 2026-01-02]
+                            # PATCH ULTRA-BLINDATA CHIAVE CONFERMA
                             with c2:
                                 conf_key = f"conf_{v['targa']}_{v.get('zona_id', 'NA')}"
                                 if conf_key not in st.session_state: st.session_state[conf_key] = False
