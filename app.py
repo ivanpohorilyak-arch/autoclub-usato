@@ -30,7 +30,7 @@ ZONE_INFO = {
 
 st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1", layout="wide")
 
-# --- 4. GESTIONE SESSIONE ---
+# --- 4. GESTIONE SESSIONE & STATO CAMERA ---
 if 'user_autenticato' not in st.session_state:
     st.session_state['user_autenticato'] = None
 if 'last_action' not in st.session_state:
@@ -152,6 +152,8 @@ else:
     if scelta == "➕ Ingresso":
         aggiorna_attivita()
         st.subheader("Registrazione Nuova Vettura")
+        st.session_state.camera_attiva = st.checkbox("📸 Attiva Scanner per zona", value=st.session_state.camera_attiva, key="in_cam_check")
+        
         foto_z = None
         if st.session_state.camera_attiva:
             foto_z = st.camera_input("Scansiona QR della Zona (OBBLIGATORIO)", key="cam_in")
@@ -162,7 +164,7 @@ else:
                     st.success(f"Zona rilevata: {z_letta}")
                 else: st.error("QR non valido")
         else:
-            st.warning("⚠️ Scanner disattivato dalla Sidebar.")
+            st.warning("⚠️ Scanner disattivato.")
 
         zona_attuale = st.session_state.get("zona_rilevata", "") if st.session_state.camera_attiva else ""
         with st.form("f_ingresso", clear_on_submit=True):
@@ -171,7 +173,7 @@ else:
             targa = st.text_input("TARGA").upper().strip()
             colore_suggerito = suggerisci_colore(targa) if targa else None
             if colore_suggerito:
-                st.info(f"🎨 Colore suggerito dal sistema: **{colore_suggerito}**")
+                st.info(f"🎨 Colore suggerito: **{colore_suggerito}**")
             lista_colori = get_colori()
             colore = st.selectbox("Colore", ["Nuovo..."] + lista_colori, index=0)
             if colore == "Nuovo...": colore = st.text_input("Specifica Colore")
@@ -182,7 +184,7 @@ else:
             if mod_sel == "Nuovo...": mod_sel = st.text_input("Modello manuale").title()
             km = st.number_input("Chilometri", min_value=0, step=100)
             n_chiave = st.number_input("N. Chiave", min_value=0, step=1)
-            if n_chiave == 0: st.info("🤝 Vettura destinata a COMMERCIANTE")
+            if n_chiave == 0: st.info("🤝 COMMERCIANTE")
             note = st.text_area("Note")
 
             if st.form_submit_button("REGISTRA VETTURA", disabled=not zona_attuale):
@@ -204,13 +206,14 @@ else:
     elif scelta == "🔍 Ricerca/Sposta":
         aggiorna_attivita()
         st.subheader("Ricerca e Spostamento")
+        st.session_state.camera_attiva = st.checkbox("📸 Attiva Scanner per nuova zona", value=st.session_state.camera_attiva, key="sp_cam_check")
         if st.session_state.camera_attiva:
             foto_sp = st.camera_input("Scansiona QR Nuova Zona", key="cam_sp")
             if foto_sp:
                 n_z = leggi_qr_zona(foto_sp)
                 if n_z in ZONE_INFO:
                     st.session_state["zona_rilevata_sposta"] = n_z
-                    st.info(f"Destinazione: {n_z}")
+                    st.info(f"Nuova zona: {n_z}")
         else: st.warning("⚠️ Scanner disattivato.")
 
         tipo = st.radio("Cerca per:", ["Targa", "Numero Chiave"], horizontal=True)
@@ -236,7 +239,7 @@ else:
                             conf = st.checkbox("⚠️ Confermo CONSEGNA", key=f"conf_{v['targa']}")
                             if c2.button("🔴 CONSEGNA", key=f"d_{v['targa']}", disabled=not conf):
                                 supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute()
-                                registra_log(v['targa'], "Consegna", "Uscita", utente_attivo)
+                                registra_log(v['targa'], "Consegna", "Uscita definitiva", utente_attivo)
                                 st.rerun()
 
     # --- 10. SEZIONE MODIFICA ---
@@ -273,7 +276,7 @@ else:
                         time.sleep(1)
                         st.rerun()
 
-    # --- 11. ALTRE FUNZIONI (VERIFICA / EXPORT FIX / LOG FIX) ---
+    # --- 11. ALTRE FUNZIONI (PATCH EXPORT DEFINITIVA) --- [cite: 2026-01-02]
     elif scelta == "📋 Verifica Zone":
         z_sel = st.selectbox("Seleziona Zona", list(ZONE_INFO.keys()))
         res = supabase.table("parco_usato").select("*").eq("zona_attuale", z_sel).eq("stato", "PRESENTE").execute()
@@ -282,18 +285,18 @@ else:
 
     elif scelta == "📊 Export":
         aggiorna_attivita()
-        # FIX EXPORT: Richiesta pulita senza merge complesso [cite: 2026-01-02]
-        res = supabase.table("parco_usato").select("targa, marca_modello, colore, km, numero_chiave, zona_attuale, note, created_at").eq("stato", "PRESENTE").execute()
+        res = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE").execute()
         if res.data:
             df = pd.DataFrame(res.data)
-            # Formattazione Data/Ora rigorosa [cite: 2026-01-02]
-            df['Data Inserimento'] = pd.to_datetime(df['created_at']).dt.strftime('%d/%m/%Y %H:%M')
-            df = df.drop(columns=['created_at'])
-            
+            # Format data se esiste [cite: 2026-01-02]
+            if "created_at" in df.columns:
+                df["created_at"] = pd.to_datetime(df["created_at"]).dt.strftime("%d/%m/%Y %H:%M")
+            # Pulizia colonne
+            df = df.drop(columns=["id", "stato"], errors="ignore")
             out = BytesIO()
-            with pd.ExcelWriter(out, engine="xlsxwriter") as w: 
-                df.to_excel(w, index=False, sheet_name="Piazzale")
-            st.download_button("📥 Scarica Report Excel", out.getvalue(), f"Piazzale_{datetime.now().strftime('%d_%m')}.xlsx")
+            with pd.ExcelWriter(out, engine="xlsxwriter") as w:
+                df.to_excel(w, index=False)
+            st.download_button("📥 Scarica Report", out.getvalue(), f"Piazzale_{datetime.now().strftime('%d_%m')}.xlsx")
         else: st.error("Nessun dato presente.")
 
     elif scelta == "📜 Log":
@@ -301,7 +304,6 @@ else:
         logs = supabase.table("log_movimenti").select("*").order("created_at", desc=True).limit(50).execute()
         if logs.data:
             df_l = pd.DataFrame(logs.data)
-            # Formattazione Data/Ora Log [cite: 2026-01-02]
             df_l['Ora'] = pd.to_datetime(df_l['created_at']).dt.strftime('%d/%m/%Y %H:%M')
             st.dataframe(df_l[["Ora", "targa", "azione", "utente"]], use_container_width=True)
 
