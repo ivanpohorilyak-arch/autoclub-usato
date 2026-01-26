@@ -136,8 +136,6 @@ else:
 
         st.sidebar.markdown("### 📷 Scanner QR")
         st.sidebar.checkbox("Attiva fotocamera", value=st.session_state.camera_attiva, key="camera_attiva", on_change=toggle_camera)
-        
-        # Micro-miglioria 3: Logout pulito 
         if st.button("Log-out"):
             st.session_state.clear()
             st.rerun()
@@ -146,7 +144,6 @@ else:
     scelta = st.radio("Seleziona Funzione", menu, horizontal=True)
     st.markdown("---")
 
-    # Micro-miglioria 1: Reset zona cambio menu [cite: 2026-01-02]
     if scelta not in ["➕ Ingresso", "🔍 Ricerca/Sposta"]:
         st.session_state["zona_rilevata"] = ""
         st.session_state["zona_rilevata_sposta"] = ""
@@ -177,12 +174,8 @@ else:
                 st.info(f"🎨 Colore suggerito dal sistema: **{colore_suggerito}**")
             lista_colori = get_colori()
             colore = st.selectbox("Colore", ["Nuovo..."] + lista_colori, index=0)
-            if colore == "Nuovo...": 
-                colore = st.text_input("Specifica Colore")
-            
-            # Micro-miglioria 2: Normalizzazione colore [cite: 2026-01-02]
+            if colore == "Nuovo...": colore = st.text_input("Specifica Colore")
             colore = colore.strip().capitalize()
-
             m_sel = st.selectbox("Marca", ["Nuova..."] + get_marche())
             if m_sel == "Nuova...": m_sel = st.text_input("Marca manuale").capitalize()
             mod_sel = st.selectbox("Modello", ["Nuovo..."] + get_modelli(m_sel))
@@ -240,7 +233,7 @@ else:
                                 st.success("Spostata!")
                                 time.sleep(1)
                                 st.rerun()
-                            conf = st.checkbox("⚠️ Confermo CONSEGNA DEFINITIVA", key=f"conf_{v['targa']}")
+                            conf = st.checkbox("⚠️ Confermo CONSEGNA", key=f"conf_{v['targa']}")
                             if c2.button("🔴 CONSEGNA", key=f"d_{v['targa']}", disabled=not conf):
                                 supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute()
                                 registra_log(v['targa'], "Consegna", "Uscita", utente_attivo)
@@ -259,7 +252,6 @@ else:
             if res.data:
                 v = res.data[0]
                 with st.form("f_mod"):
-                    st.info(f"Modifica: {v['targa']}")
                     upd = {
                         "targa": st.text_input("Targa", value=v['targa']).upper().strip(),
                         "marca_modello": st.text_input("Modello", value=v['marca_modello']),
@@ -269,7 +261,7 @@ else:
                         "zona_attuale": st.selectbox("Zona", list(ZONE_INFO.keys()), index=list(ZONE_INFO.keys()).index(v['zona_attuale'])),
                         "note": st.text_area("Note", value=v['note'])
                     }
-                    if st.form_submit_button("SALVA MODIFICHE"):
+                    if st.form_submit_button("SALVA"):
                         if upd["targa"] != v["targa"]:
                             dup = supabase.table("parco_usato").select("targa").eq("targa", upd["targa"]).eq("stato", "PRESENTE").execute()
                             if dup.data:
@@ -281,7 +273,7 @@ else:
                         time.sleep(1)
                         st.rerun()
 
-    # --- 11. ALTRE FUNZIONI ---
+    # --- 11. ALTRE FUNZIONI (VERIFICA / EXPORT FIX / LOG FIX) ---
     elif scelta == "📋 Verifica Zone":
         z_sel = st.selectbox("Seleziona Zona", list(ZONE_INFO.keys()))
         res = supabase.table("parco_usato").select("*").eq("zona_attuale", z_sel).eq("stato", "PRESENTE").execute()
@@ -290,27 +282,28 @@ else:
 
     elif scelta == "📊 Export":
         aggiorna_attivita()
-        res = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE").execute()
+        # FIX EXPORT: Richiesta pulita senza merge complesso [cite: 2026-01-02]
+        res = supabase.table("parco_usato").select("targa, marca_modello, colore, km, numero_chiave, zona_attuale, note, created_at").eq("stato", "PRESENTE").execute()
         if res.data:
-            df = pd.DataFrame(res.data).drop(columns=["id", "created_at", "stato"], errors="ignore")
-            # Patch Data/Ora Excel: solo GG/MM/AAAA HH:MM 
-            res_full = supabase.table("parco_usato").select("targa, created_at").eq("stato", "PRESENTE").execute()
-            df_dates = pd.DataFrame(res_full.data)
-            df = df.merge(df_dates, on="targa", how="left")
-            df['created_at'] = pd.to_datetime(df['created_at']).dt.strftime('%d/%m/%Y %H:%M')
+            df = pd.DataFrame(res.data)
+            # Formattazione Data/Ora rigorosa [cite: 2026-01-02]
+            df['Data Inserimento'] = pd.to_datetime(df['created_at']).dt.strftime('%d/%m/%Y %H:%M')
+            df = df.drop(columns=['created_at'])
             
             out = BytesIO()
-            with pd.ExcelWriter(out, engine="xlsxwriter") as w: df.to_excel(w, index=False)
-            st.download_button("📥 Scarica Report", out.getvalue(), "Piazzale.xlsx")
+            with pd.ExcelWriter(out, engine="xlsxwriter") as w: 
+                df.to_excel(w, index=False, sheet_name="Piazzale")
+            st.download_button("📥 Scarica Report Excel", out.getvalue(), f"Piazzale_{datetime.now().strftime('%d_%m')}.xlsx")
+        else: st.error("Nessun dato presente.")
 
     elif scelta == "📜 Log":
         st_autorefresh(interval=10000, key="log_refresh")
         logs = supabase.table("log_movimenti").select("*").order("created_at", desc=True).limit(50).execute()
         if logs.data:
             df_l = pd.DataFrame(logs.data)
-            # Patch Data/Ora Log: solo GG/MM/AAAA HH:MM 
-            df_l['created_at'] = pd.to_datetime(df_l['created_at']).dt.strftime('%d/%m/%Y %H:%M')
-            st.dataframe(df_l[["created_at", "targa", "azione", "utente"]], use_container_width=True)
+            # Formattazione Data/Ora Log [cite: 2026-01-02]
+            df_l['Ora'] = pd.to_datetime(df_l['created_at']).dt.strftime('%d/%m/%Y %H:%M')
+            st.dataframe(df_l[["Ora", "targa", "azione", "utente"]], use_container_width=True)
 
     elif scelta == "🖨️ Stampa QR":
         z = st.selectbox("Scegli Zona", list(ZONE_INFO.keys()))
