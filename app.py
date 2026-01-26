@@ -40,7 +40,6 @@ if 'zona_rilevata' not in st.session_state:
 if 'zona_rilevata_sposta' not in st.session_state:
     st.session_state['zona_rilevata_sposta'] = ""
 
-# PATCH 1: Camera OFF di default [cite: 2026-01-02]
 if 'camera_attiva' not in st.session_state:
     st.session_state['camera_attiva'] = False
 
@@ -124,11 +123,10 @@ if st.session_state['user_autenticato'] is None:
             st.rerun()
         else: st.error("Accesso Negato")
 else:
-    # --- 7. SIDEBAR & PATCH 1 (Toggle Unificato) ---
+    # --- 7. SIDEBAR ---
     utente_attivo = st.session_state['user_autenticato']
     with st.sidebar:
         st.info(f"👤 Operatore: {utente_attivo}")
-        
         def toggle_camera():
             if not st.session_state.camera_attiva:
                 st.session_state["zona_rilevata"] = ""
@@ -139,19 +137,24 @@ else:
         st.sidebar.markdown("### 📷 Scanner QR")
         st.sidebar.checkbox("Attiva fotocamera", value=st.session_state.camera_attiva, key="camera_attiva", on_change=toggle_camera)
         
+        # Micro-miglioria 3: Logout pulito 
         if st.button("Log-out"):
-            st.session_state['user_autenticato'] = None
+            st.session_state.clear()
             st.rerun()
 
     menu = ["➕ Ingresso", "🔍 Ricerca/Sposta", "✏️ Modifica", "📋 Verifica Zone", "📊 Export", "📜 Log", "🖨️ Stampa QR"]
     scelta = st.radio("Seleziona Funzione", menu, horizontal=True)
     st.markdown("---")
 
+    # Micro-miglioria 1: Reset zona cambio menu [cite: 2026-01-02]
+    if scelta not in ["➕ Ingresso", "🔍 Ricerca/Sposta"]:
+        st.session_state["zona_rilevata"] = ""
+        st.session_state["zona_rilevata_sposta"] = ""
+
     # --- 8. SEZIONE INGRESSO ---
     if scelta == "➕ Ingresso":
         aggiorna_attivita()
         st.subheader("Registrazione Nuova Vettura")
-        
         foto_z = None
         if st.session_state.camera_attiva:
             foto_z = st.camera_input("Scansiona QR della Zona (OBBLIGATORIO)", key="cam_in")
@@ -164,42 +167,35 @@ else:
         else:
             st.warning("⚠️ Scanner disattivato dalla Sidebar.")
 
-        # PATCH 2: Validazione zona dipendente da stato camera [cite: 2026-01-02]
         zona_attuale = st.session_state.get("zona_rilevata", "") if st.session_state.camera_attiva else ""
-        
         with st.form("f_ingresso", clear_on_submit=True):
             if not zona_attuale: st.error("❌ Scansione QR Obbligatoria")
             else: st.info(f"📍 Zona: **{zona_attuale}**")
-            
             targa = st.text_input("TARGA").upper().strip()
-            
-            # PATCH 4: Colore solo suggerito [cite: 2026-01-02]
             colore_suggerito = suggerisci_colore(targa) if targa else None
             if colore_suggerito:
                 st.info(f"🎨 Colore suggerito dal sistema: **{colore_suggerito}**")
-            
             lista_colori = get_colori()
             colore = st.selectbox("Colore", ["Nuovo..."] + lista_colori, index=0)
-            if colore == "Nuovo...": colore = st.text_input("Specifica Colore")
+            if colore == "Nuovo...": 
+                colore = st.text_input("Specifica Colore")
             
+            # Micro-miglioria 2: Normalizzazione colore [cite: 2026-01-02]
+            colore = colore.strip().capitalize()
+
             m_sel = st.selectbox("Marca", ["Nuova..."] + get_marche())
             if m_sel == "Nuova...": m_sel = st.text_input("Marca manuale").capitalize()
             mod_sel = st.selectbox("Modello", ["Nuovo..."] + get_modelli(m_sel))
             if mod_sel == "Nuovo...": mod_sel = st.text_input("Modello manuale").title()
-            
             km = st.number_input("Chilometri", min_value=0, step=100)
             n_chiave = st.number_input("N. Chiave", min_value=0, step=1)
-            
-            # PATCH 7: Feedback Commerciante [cite: 2026-01-02]
             if n_chiave == 0: st.info("🤝 Vettura destinata a COMMERCIANTE")
-            
             note = st.text_area("Note")
 
             if st.form_submit_button("REGISTRA VETTURA", disabled=not zona_attuale):
                 aggiorna_attivita()
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa): st.warning("Targa non valida")
                 else:
-                    # Blocco duplicati [cite: 2025-12-30]
                     check = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute()
                     if check.data: st.error("Vettura già presente!")
                     else:
@@ -215,7 +211,6 @@ else:
     elif scelta == "🔍 Ricerca/Sposta":
         aggiorna_attivita()
         st.subheader("Ricerca e Spostamento")
-        
         if st.session_state.camera_attiva:
             foto_sp = st.camera_input("Scansiona QR Nuova Zona", key="cam_sp")
             if foto_sp:
@@ -237,10 +232,7 @@ else:
                         with st.expander(f"🚗 {v['targa']} - {v['marca_modello']}", expanded=True):
                             st.write(f"📍 Posizione: **{v['zona_attuale']}**")
                             c1, c2 = st.columns(2)
-                            
-                            # PATCH 2 applicata allo spostamento
                             zn = st.session_state.get("zona_rilevata_sposta", "") if st.session_state.camera_attiva else ""
-                            
                             if c1.button("SPOSTA QUI", key=f"b_{v['targa']}", disabled=not zn):
                                 supabase.table("parco_usato").update({"zona_attuale": zn}).eq("targa", v['targa']).execute()
                                 registra_log(v['targa'], "Spostamento", f"In {zn}", utente_attivo)
@@ -248,15 +240,13 @@ else:
                                 st.success("Spostata!")
                                 time.sleep(1)
                                 st.rerun()
-                            
-                            # PATCH 6: Consegna con conferma [cite: 2026-01-02]
                             conf = st.checkbox("⚠️ Confermo CONSEGNA DEFINITIVA", key=f"conf_{v['targa']}")
                             if c2.button("🔴 CONSEGNA", key=f"d_{v['targa']}", disabled=not conf):
                                 supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute()
                                 registra_log(v['targa'], "Consegna", "Uscita", utente_attivo)
                                 st.rerun()
 
-    # --- 10. SEZIONE MODIFICA (Ricerca Smart + Patch 5) --- [cite: 2026-01-02]
+    # --- 10. SEZIONE MODIFICA ---
     elif scelta == "✏️ Modifica":
         aggiorna_attivita()
         st.subheader("Correzione Dati")
@@ -273,27 +263,25 @@ else:
                     upd = {
                         "targa": st.text_input("Targa", value=v['targa']).upper().strip(),
                         "marca_modello": st.text_input("Modello", value=v['marca_modello']),
-                        "colore": st.text_input("Colore", value=v['colore']),
+                        "colore": st.text_input("Colore", value=v['colore']).strip().capitalize(),
                         "km": st.number_input("KM", value=int(v['km'])),
                         "numero_chiave": st.number_input("Chiave", value=int(v['numero_chiave'])),
                         "zona_attuale": st.selectbox("Zona", list(ZONE_INFO.keys()), index=list(ZONE_INFO.keys()).index(v['zona_attuale'])),
                         "note": st.text_area("Note", value=v['note'])
                     }
                     if st.form_submit_button("SALVA MODIFICHE"):
-                        # PATCH 5: Blocco duplicati in modifica [cite: 2025-12-30, 2026-01-02]
                         if upd["targa"] != v["targa"]:
                             dup = supabase.table("parco_usato").select("targa").eq("targa", upd["targa"]).eq("stato", "PRESENTE").execute()
                             if dup.data:
-                                st.error("❌ Errore: Targa già esistente nel piazzale!")
+                                st.error("❌ Targa già esistente!")
                                 st.stop()
-                        
                         supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute()
                         registra_log(upd["targa"], "Modifica", "Correzione manuale", utente_attivo)
                         st.success("✅ Salvataggio avvenuto!")
                         time.sleep(1)
                         st.rerun()
 
-    # --- RESTANTI FUNZIONI ---
+    # --- 11. ALTRE FUNZIONI ---
     elif scelta == "📋 Verifica Zone":
         z_sel = st.selectbox("Seleziona Zona", list(ZONE_INFO.keys()))
         res = supabase.table("parco_usato").select("*").eq("zona_attuale", z_sel).eq("stato", "PRESENTE").execute()
@@ -301,9 +289,16 @@ else:
         if res.data: st.dataframe(pd.DataFrame(res.data)[["targa", "marca_modello", "colore"]], use_container_width=True)
 
     elif scelta == "📊 Export":
+        aggiorna_attivita()
         res = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE").execute()
         if res.data:
             df = pd.DataFrame(res.data).drop(columns=["id", "created_at", "stato"], errors="ignore")
+            # Patch Data/Ora Excel: solo GG/MM/AAAA HH:MM 
+            res_full = supabase.table("parco_usato").select("targa, created_at").eq("stato", "PRESENTE").execute()
+            df_dates = pd.DataFrame(res_full.data)
+            df = df.merge(df_dates, on="targa", how="left")
+            df['created_at'] = pd.to_datetime(df['created_at']).dt.strftime('%d/%m/%Y %H:%M')
+            
             out = BytesIO()
             with pd.ExcelWriter(out, engine="xlsxwriter") as w: df.to_excel(w, index=False)
             st.download_button("📥 Scarica Report", out.getvalue(), "Piazzale.xlsx")
@@ -311,7 +306,11 @@ else:
     elif scelta == "📜 Log":
         st_autorefresh(interval=10000, key="log_refresh")
         logs = supabase.table("log_movimenti").select("*").order("created_at", desc=True).limit(50).execute()
-        if logs.data: st.dataframe(pd.DataFrame(logs.data)[["created_at", "targa", "azione", "utente"]], use_container_width=True)
+        if logs.data:
+            df_l = pd.DataFrame(logs.data)
+            # Patch Data/Ora Log: solo GG/MM/AAAA HH:MM 
+            df_l['created_at'] = pd.to_datetime(df_l['created_at']).dt.strftime('%d/%m/%Y %H:%M')
+            st.dataframe(df_l[["created_at", "targa", "azione", "utente"]], use_container_width=True)
 
     elif scelta == "🖨️ Stampa QR":
         z = st.selectbox("Scegli Zona", list(ZONE_INFO.keys()))
