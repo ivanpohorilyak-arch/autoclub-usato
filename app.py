@@ -151,8 +151,7 @@ else:
                     st.session_state["zona_nome"] = ZONE_INFO[z_id]
                     st.success(f"✅ Zona rilevata: {st.session_state['zona_nome']}")
                 else: st.error("❌ QR non valido")
-        else:
-            st.warning("⚠️ Scanner disattivato dalla Sidebar. Attivalo per leggere la zona.")
+        else: st.warning("⚠️ Scanner disattivato dalla Sidebar.")
 
         with st.form("f_ingresso", clear_on_submit=True):
             if not st.session_state['zona_id']: st.error("❌ Scansione QR Obbligatoria")
@@ -173,7 +172,7 @@ else:
             
             km = st.number_input("Chilometri", min_value=0, step=100)
             n_chiave = st.number_input("N. Chiave", min_value=0, step=1)
-            if n_chiave == 0: st.info("🤝 Valore 0 = Vetture destinati al commercianti")
+            if n_chiave == 0: st.info("🤝 Valore 0 = Vetture destinati ai commercianti")
             note = st.text_area("Note")
 
             if st.form_submit_button("REGISTRA", disabled=not st.session_state['zona_id']):
@@ -190,7 +189,7 @@ else:
                         }
                         supabase.table("parco_usato").insert(data).execute()
                         registra_log(targa, "Ingresso", f"In {st.session_state['zona_nome']}", utente_attivo)
-                        st.success("✅ Vettura registrata!")
+                        st.success("✅ Vettura registrata correttamente!")
                         st.session_state["zona_id"] = ""; st.session_state["zona_nome"] = ""
                         time.sleep(1); st.rerun()
 
@@ -206,8 +205,8 @@ else:
                     st.session_state["zona_id_sposta"] = z_id_sp
                     st.session_state["zona_nome_sposta"] = ZONE_INFO[z_id_sp]
                     st.info(f"✅ Destinazione rilevata: {st.session_state['zona_nome_sposta']}")
-        else:
-            st.warning("⚠️ Scanner disattivato dalla Sidebar. Attivalo per spostare il veicolo.")
+                else: st.error("❌ QR non valido")
+        else: st.warning("⚠️ Scanner disattivato dalla Sidebar.")
 
         tipo = st.radio("Cerca per:", ["Targa", "Numero Chiave"], horizontal=True)
         q = st.text_input("Dato da cercare").strip()
@@ -231,14 +230,17 @@ else:
                                 st.session_state["zona_id_sposta"] = ""; st.session_state["zona_nome_sposta"] = ""
                                 st.success("✅ Spostata!"); time.sleep(1); st.rerun()
 
-                            # PATCH ULTRA-BLINDATA CHIAVE CONFERMA
+                            # PATCH CONSEGNA ULTRA-SICURA
                             with c2:
                                 conf_key = f"conf_{v['targa']}_{v.get('zona_id', 'NA')}"
                                 if conf_key not in st.session_state: st.session_state[conf_key] = False
-                                st.session_state[conf_key] = st.checkbox("⚠️ Confermo CONSEGNA", key=conf_key)
+                                
+                                # FIX: Inizializzazione stabile senza ri-assegnazione diretta
+                                st.checkbox("⚠️ Confermo CONSEGNA DEFINITIVA (irreversibile)", key=conf_key)
+                                
                                 if st.button("🔴 CONSEGNA DEFINITIVA", key=f"btn_{v['targa']}", disabled=not st.session_state[conf_key]):
                                     supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute()
-                                    registra_log(v['targa'], "Consegna", f"Uscita da {v['zona_attuale']}", utente_attivo)
+                                    registra_log(v['targa'], "Consegna", f"Uscita definitiva da {v['zona_attuale']}", utente_attivo)
                                     st.session_state[conf_key] = False
                                     st.success("✅ CONSEGNA REGISTRATA"); time.sleep(1); st.rerun()
 
