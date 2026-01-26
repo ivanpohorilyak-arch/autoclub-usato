@@ -17,10 +17,7 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- 2. CREDENZIALI & TIMEOUT ---
-CREDENZIALI = {
-    "Luca Simonini": "2026", 
-    "Ivan Pohorilyak": "1234"
-}
+CREDENZIALI = {"Luca Simonini": "2026", "Ivan Pohorilyak": "1234"}
 TIMEOUT_MINUTI = 10
 
 # --- 3. CONFIGURAZIONE ZONE ---
@@ -127,7 +124,7 @@ if st.session_state['user_autenticato'] is None:
             st.rerun()
         else: st.error("PIN non corretto")
 else:
-    # --- 7. APP PRINCIPALE & FIX TOGGLE ---
+    # --- 7. APP PRINCIPALE & FIX CHECKBOX ---
     utente_attivo = st.session_state['user_autenticato']
     st.sidebar.info(f"Operatore: {utente_attivo}")
 
@@ -138,8 +135,13 @@ else:
             st.session_state.pop("cam_zona", None)
             st.session_state.pop("cam_sposta", None)
 
+    # --- SOSTITUZIONE TOGGLE CON CHECKBOX --- [cite: 2026-01-02]
     st.sidebar.markdown("### 📷 Gestione Scanner")
-    st.sidebar.toggle("Attiva scanner QR", key="camera_attiva", on_change=toggle_camera)
+    st.sidebar.checkbox(
+        "Attiva scanner QR",
+        key="camera_attiva",
+        on_change=toggle_camera
+    )
 
     menu = ["➕ Ingresso", "🔍 Ricerca/Sposta", "✏️ Modifica", "📋 Verifica Zone", "📊 Export", "📜 Log", "🖨️ Stampa QR"]
     scelta = st.radio("Seleziona Funzione", menu, horizontal=True)
@@ -275,12 +277,12 @@ else:
                         st.rerun()
             else: st.error("Veicolo non trovato.")
 
-    # --- ALTRI MENU (VERIFICA, EXPORT, LOG, QR) ---
+    # --- ALTRI MENU ---
     elif scelta == "📋 Verifica Zone":
         aggiorna_attivita()
         z_sel = st.selectbox("Zona", list(ZONE_INFO.keys()))
         res = supabase.table("parco_usato").select("*").eq("zona_attuale", z_sel).eq("stato", "PRESENTE").execute()
-        st.metric("Veicoli", len(res.data), delta_color="off")
+        st.metric("Veicoli", len(res.data))
         if res.data: st.dataframe(pd.DataFrame(res.data)[["targa", "marca_modello", "numero_chiave", "colore", "km"]], use_container_width=True)
 
     elif scelta == "📊 Export":
