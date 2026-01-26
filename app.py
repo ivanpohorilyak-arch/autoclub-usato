@@ -19,7 +19,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # --- 2. CREDENZIALI & TIMEOUT ---
 CREDENZIALI = {
     "Luca Simonini": "2026", 
-    "Ivan Pohorilyak": "1234"
+    "Ivan Pohorilyak": "1234",
     "Abdul": "0000"
 }
 TIMEOUT_MINUTI = 10
