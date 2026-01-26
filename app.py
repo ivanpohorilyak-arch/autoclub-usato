@@ -12,13 +12,11 @@ import qrcode
 from PIL import Image, ImageDraw, ImageFont
 
 # --- 1. CONFIGURAZIONE DATABASE ---
-# [cite: 2026-01-02]
 SUPABASE_URL = "https://ihhypwraskzhjovyvwxd.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImloaHlwd3Jhc2t6aGpvdnl2d3hkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkxODM4MDQsImV4cCI6MjA4NDc1OTgwNH0.E5R3nUzfkcJz1J1wr3LYxKEtLA9-8cvbsh56sEURpqA"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- 2. CREDENZIALI & TIMEOUT ---
-# [cite: 2026-01-02]
 CREDENZIALI = {
     "Luca Simonini": "2026", 
     "Ivan Pohorilyak": "1234"
@@ -155,7 +153,12 @@ else:
     if scelta == "➕ Ingresso":
         aggiorna_attivita()
         st.subheader("Registrazione Nuova Vettura")
-        foto_z = st.camera_input("Scanner Zona QR (OBBLIGATORIO)", key="cam_zona") if st.session_state['camera_attiva'] else st.warning("📷 Scanner disattivato")
+        foto_z = None
+        if st.session_state['camera_attiva']:
+            foto_z = st.camera_input("Scanner Zona QR (OBBLIGATORIO)", key="cam_zona")
+        else:
+            st.warning("📷 Scanner disattivato")
+            
         if foto_z:
             z_letta = leggi_qr_zona(foto_z)
             if z_letta in ZONE_INFO:
@@ -203,7 +206,12 @@ else:
     elif scelta == "🔍 Ricerca/Sposta":
         aggiorna_attivita()
         st.subheader("Ricerca e Movimentazione")
-        foto_sposta = st.camera_input("Scannerizza QR Nuova Zona", key="cam_sposta") if st.session_state['camera_attiva'] else st.warning("📷 Scanner disattivato")
+        foto_sposta = None
+        if st.session_state['camera_attiva']:
+            foto_sposta = st.camera_input("Scannerizza QR Nuova Zona", key="cam_sposta")
+        else:
+            st.warning("📷 Scanner disattivato")
+            
         if foto_sposta:
             n_z_letta = leggi_qr_zona(foto_sposta)
             if n_z_letta in ZONE_INFO:
