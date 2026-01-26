@@ -30,7 +30,7 @@ ZONE_INFO = {
 
 st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1", layout="wide")
 
-# --- 4. GESTIONE SESSIONE & STATO CAMERA ---
+# --- 4. GESTIONE SESSIONE ---
 if 'user_autenticato' not in st.session_state:
     st.session_state['user_autenticato'] = None
 if 'last_action' not in st.session_state:
@@ -40,7 +40,6 @@ if 'zona_rilevata' not in st.session_state:
 if 'zona_rilevata_sposta' not in st.session_state:
     st.session_state['zona_rilevata_sposta'] = ""
 
-# Camera OFF di default
 if 'camera_attiva' not in st.session_state:
     st.session_state['camera_attiva'] = False
 
@@ -183,7 +182,11 @@ else:
             if mod_sel == "Nuovo...": mod_sel = st.text_input("Modello manuale").title()
             km = st.number_input("Chilometri", min_value=0, step=100)
             n_chiave = st.number_input("N. Chiave", min_value=0, step=1)
-            if n_chiave == 0: st.info("🤝 COMMERCIANTE")
+            
+            # --- FEEDBACK COMMERCIANTE AGGIORNATO --- [cite: 2026-01-02]
+            if n_chiave == 0: 
+                st.info("🤝 Valore 0 = Vettura destinata a COMMERCIANTE")
+            
             note = st.text_area("Note")
 
             if st.form_submit_button("REGISTRA VETTURA", disabled=not zona_attuale):
@@ -282,7 +285,6 @@ else:
         st.metric(f"Veicoli", len(res.data))
         if res.data: st.dataframe(pd.DataFrame(res.data)[["targa", "marca_modello", "colore"]], use_container_width=True)
 
-    # --- FIX 📊 Export DEFINITIVO --- [cite: 2026-01-02]
     elif scelta == "📊 Export":
         aggiorna_attivita()
         try:
