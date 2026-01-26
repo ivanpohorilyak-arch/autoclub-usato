@@ -26,7 +26,7 @@ TIMEOUT_MINUTI = 10
 
 # --- 3. CONFIGURAZIONE ZONE ---
 ZONE_INFO = {
-    "Deposito N.9": 1, "Deposito N.7": 100, "Deposito N.6 (Lavaggisti)": 100, 
+    "Deposito N.9": 100, "Deposito N.7": 100, "Deposito N.6 (Lavaggisti)": 100, 
     "Deposito unificato 1 e 2": 100, "Showroom": 100, "A Vetture vendute": 100, 
     "B Lavaggio Esterno": 100, "C Commercianti senza telo": 100, 
     "D Commercianti con telo": 100, "E lavorazioni esterni": 100, "F verso altri sedi": 100
