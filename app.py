@@ -53,13 +53,10 @@ def controllo_timeout():
             st.rerun()
 
 # --- 5. FUNZIONI CORE ---
-def registra_log(targa, azione, dettaglio, utente):
+def registra_log(targa, azione, d, u):
     try:
-        supabase.table("log_movimenti").insert({
-            "targa": targa, "azione": azione, "dettaglio": dettaglio, "utente": utente
-        }).execute()
-    except Exception as e:
-        st.error(f"Errore Log: {e}")
+        supabase.table("log_movimenti").insert({"targa": targa, "azione": azione, "dettaglio": d, "utente": u}).execute()
+    except Exception as e: st.error(f"Errore Log: {e}")
 
 def get_marche():
     try:
@@ -114,7 +111,6 @@ if st.session_state['user_autenticato'] is None:
             aggiorna_attivita(); st.rerun()
         else: st.error("Accesso negato")
 else:
-    # --- 7. SIDEBAR ---
     utente_attivo = st.session_state['user_autenticato']
     with st.sidebar:
         st.info(f"👤 {utente_attivo}")
@@ -125,10 +121,6 @@ else:
     menu = ["➕ Ingresso", "🔍 Ricerca/Sposta", "✏️ Modifica", "📋 Verifica Zone", "📊 Dashboard Zone", "📊 Export", "📜 Log", "🖨️ Stampa QR", "♻️ Ripristina"]
     scelta = st.radio("Seleziona Funzione", menu, horizontal=True)
     st.markdown("---")
-
-    if scelta not in ["➕ Ingresso", "🔍 Ricerca/Sposta"]:
-        st.session_state["zona_id"] = ""; st.session_state["zona_nome"] = ""
-        st.session_state["zona_id_sposta"] = ""; st.session_state["zona_nome_sposta"] = ""
 
     # --- 8. SEZIONE INGRESSO ---
     if scelta == "➕ Ingresso":
@@ -143,11 +135,10 @@ else:
                     st.session_state["zona_nome"] = ZONE_INFO[z_id]
                     st.success(f"✅ Zona rilevata: {st.session_state['zona_nome']}")
                 else: st.error("❌ QR non valido")
-        else:
-            st.warning("⚠️ Scanner disattivato dalla Sidebar. Attivalo per leggere la zona.")
+        else: st.warning("⚠️ Scanner disattivato dalla Sidebar.")
 
         with st.form("f_ingresso", clear_on_submit=True):
-            if not st.session_state['zona_id']: st.error("❌ Scansione QR Obbligatoria")
+            if not st.session_state['zona_id']: st.error("❌ Scansione QR Obbligatoria per abilitare la registrazione")
             else: st.info(f"📍 Zona selezionata: **{st.session_state['zona_nome']}**")
             
             targa = st.text_input("TARGA").upper().strip()
@@ -164,10 +155,10 @@ else:
             
             km = st.number_input("Chilometri", min_value=0, step=100)
             n_chiave = st.number_input("N. Chiave", min_value=0, step=1)
-            if n_chiave == 0: st.info("🤝 Valore 0 = Vetture destinate ai commercianti")
             note = st.text_area("Note")
 
-            if st.form_submit_button("REGISTRA"):
+            # PULSANTE ATTIVO SOLO DOPO SCANSIONE
+            if st.form_submit_button("REGISTRA LA VETTURA", disabled=not st.session_state['zona_id']):
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa): st.warning("Targa non valida")
                 else:
                     check = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute()
@@ -193,13 +184,20 @@ else:
                     st.session_state["zona_nome_sposta"] = ZONE_INFO[z_id_sp]
                     st.info(f"✅ Destinazione: {st.session_state['zona_nome_sposta']}")
                 else: st.error("❌ QR non valido")
-        else: st.warning("⚠️ Scanner disattivato dalla Sidebar.")
 
         tipo = st.radio("Cerca per:", ["Targa", "Numero Chiave"], horizontal=True)
-        q = st.text_input("Dato da cercare").strip()
-        if q:
+        q = st.text_input("Dato da cercare").strip().upper()
+        
+        # VALIDAZIONE TARGA IN RICERCA
+        valido = True
+        if q and tipo == "Targa":
+            if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', q):
+                st.warning("⚠️ Formato Targa non valido (Esempio corretto: AB123CD)")
+                valido = False
+
+        if q and valido:
             col = "targa" if tipo == "Targa" else "numero_chiave"
-            val = q.upper() if tipo == "Targa" else int(q) if q.isdigit() else None
+            val = q if tipo == "Targa" else int(q) if q.isdigit() else None
             if val is not None:
                 res = supabase.table("parco_usato").select("*").eq(col, val).eq("stato", "PRESENTE").execute()
                 if res.data:
@@ -227,10 +225,10 @@ else:
         aggiorna_attivita()
         st.subheader("Correzione Dati")
         t_mod = st.radio("Cerca per:", ["Targa", "Numero Chiave"], horizontal=True, key="m_t")
-        q_mod = st.text_input("Inserisci valore").strip()
+        q_mod = st.text_input("Inserisci valore").strip().upper()
         if q_mod:
             col_f = "targa" if t_mod == "Targa" else "numero_chiave"
-            val_f = q_mod.upper() if t_mod == "Targa" else int(q_mod) if q_mod.isdigit() else None
+            val_f = q_mod if t_mod == "Targa" else int(q_mod) if q_mod.isdigit() else None
             res = supabase.table("parco_usato").select("*").eq(col_f, val_f).eq("stato", "PRESENTE").execute()
             if res.data:
                 v = res.data[0]
@@ -242,7 +240,7 @@ else:
                         supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute()
                         registra_log(upd["targa"], "Modifica", "Correzione", utente_attivo); st.success("✅ Salvato!"); time.sleep(1); st.rerun()
 
-    # --- 11. ALTRE FUNZIONI & CORREZIONE DATA ---
+    # --- 11. ALTRE FUNZIONI ---
     elif scelta == "📊 Dashboard Zone":
         st.subheader("📍 Movimenti per Zona")
         z_sel = st.selectbox("Seleziona Zona", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}")
@@ -250,7 +248,7 @@ else:
             res = supabase.table("log_movimenti").select("*").ilike("dettaglio", f"%{ZONE_INFO[z_sel]}%").order("created_at", desc=True).limit(100).execute()
             if res.data:
                 df = pd.DataFrame(res.data)
-                df["Ora"] = pd.to_datetime(df["created_at"]).dt.strftime("%d/%m/%Y %H:%M") # FORMATO DATA CORRETTO
+                df["Ora"] = pd.to_datetime(df["created_at"]).dt.strftime("%d/%m/%Y %H:%M")
                 st.metric("Movimenti", len(df))
                 st.dataframe(df[["Ora", "targa", "azione", "utente"]], use_container_width=True)
 
@@ -260,7 +258,7 @@ else:
             res = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE").execute()
             if res.data:
                 df = pd.DataFrame(res.data)
-                df["Data Inserimento"] = pd.to_datetime(df["created_at"]).dt.strftime("%d/%m/%Y %H:%M") # FORMATO DATA CORRETTO
+                df["Data Inserimento"] = pd.to_datetime(df["created_at"]).dt.strftime("%d/%m/%Y %H:%M")
                 df = df.drop(columns=["id", "stato", "created_at"], errors="ignore")
                 out = BytesIO()
                 with pd.ExcelWriter(out, engine="xlsxwriter") as w: df.to_excel(w, index=False)
@@ -272,7 +270,7 @@ else:
         logs = supabase.table("log_movimenti").select("*").order("created_at", desc=True).limit(50).execute()
         if logs.data:
             df_l = pd.DataFrame(logs.data)
-            df_l['Ora'] = pd.to_datetime(df_l['created_at']).dt.strftime('%d/%m/%Y %H:%M') # FORMATO DATA CORRETTO
+            df_l['Ora'] = pd.to_datetime(df_l['created_at']).dt.strftime('%d/%m/%Y %H:%M')
             st.dataframe(df_l[["Ora", "targa", "azione", "utente"]], use_container_width=True)
 
     elif scelta == "🖨️ Stampa QR":
