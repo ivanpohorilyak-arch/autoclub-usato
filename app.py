@@ -236,7 +236,7 @@ else:
                         supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute()
                         registra_log(upd["targa"], "Modifica", "Correzione", utente_attivo); st.success("✅ Salvato!"); time.sleep(1); st.rerun()
 
-    # --- 11. ALTRE FUNZIONI & CAPACITY FIX ---
+    # --- 11. ANALISI & UTILITY ---
     elif scelta == "📊 Dashboard Zone":
         st.subheader("📍 Movimenti per Zona")
         z_sel = st.selectbox("Seleziona Zona", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}")
@@ -248,23 +248,24 @@ else:
                 st.metric("Movimenti", len(df))
                 st.dataframe(df[["Ora", "targa", "azione", "utente"]], use_container_width=True)
 
+    # --- PATCH PRECISION CAPACITY ---
     elif scelta == "📋 Verifica Zone":
         st.subheader("📋 Analisi Capienza Piazzale")
-        z_v = st.selectbox("Seleziona Zona da analizzare", list(ZONE_INFO.values()))
-        res = supabase.table("parco_usato").select("*").eq("zona_attuale", z_v).eq("stato", "PRESENTE").execute()
-        occupati = len(res.data)
-        capienza_max = 100
-        percentuale = min(occupati / capienza_max, 1.0)
-        
-        c1, c2 = st.columns([1, 3])
-        c1.metric("Posti Occupati", f"{occupati}/{capienza_max}", delta=f"{capienza_max-occupati} liberi", delta_color="normal")
-        c2.write("📉 Livello di riempimento")
-        c2.progress(percentuale)
-        
-        if res.data:
-            st.dataframe(pd.DataFrame(res.data)[["targa", "marca_modello", "colore"]], use_container_width=True)
-        else:
-            st.info(f"La zona {z_v} è attualmente vuota.")
+        z_id = st.selectbox("Seleziona Zona da analizzare", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}")
+        if z_id:
+            z_nome = ZONE_INFO[z_id]
+            res = supabase.table("parco_usato").select("*").eq("zona_id", z_id).eq("stato", "PRESENTE").execute()
+            occupati = len(res.data) if res.data else 0
+            capienza_max = 100
+            percentuale = min(occupati / capienza_max, 1.0)
+            c1, c2 = st.columns([1, 3])
+            c1.metric("Posti Occupati", f"{occupati}/{capienza_max}", delta=f"{capienza_max - occupati} liberi", delta_color="normal")
+            c2.write("📉 Livello di riempimento")
+            c2.progress(percentuale)
+            if res.data:
+                df = pd.DataFrame(res.data)
+                st.dataframe(df[["targa", "marca_modello", "colore"]], use_container_width=True)
+            else: st.info(f"La zona **{z_nome}** è attualmente vuota.")
 
     elif scelta == "📊 Export":
         aggiorna_attivita()
@@ -297,7 +298,7 @@ else:
     elif scelta == "♻️ Ripristina":
         st.subheader("♻️ Ripristino Vetture Consegnate")
         st.info("🤝 Numero della chiave con valore 0 = Vetture destinate ai commercianti")
-        targa_back = st.text_input("Targa da ripristinare").upper().strip()
+        targa_back = st.text_input("Inserisci Targa da ripristinare").upper().strip()
         if targa_back:
             res = supabase.table("parco_usato").select("*").eq("targa", targa_back).eq("stato", "CONSEGNATO").execute()
             if res.data:
@@ -307,4 +308,4 @@ else:
                     supabase.table("parco_usato").update({"stato": "PRESENTE"}).eq("targa", targa_back).execute()
                     registra_log(targa_back, "Ripristino", "Riportata in PRESENTE", utente_attivo)
                     st.success(f"✅ Vettura {targa_back} ripristinata!"); time.sleep(1); st.rerun()
-            else: st.error("Nessuna vettura 'CONSEGNATA' trovata.")
+            else: st.error("Nessuna vettura 'CONSEGNATA' trovata con questa targa.")
