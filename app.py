@@ -28,7 +28,7 @@ ZONE_INFO = {
     "Z09": "Commercianti con telo", "Z10": "Lavorazioni esterni", "Z11": "Verso altre sedi"
 }
 
-st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1 Master", layout="wide")
+st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1", layout="wide")
 
 # --- 4. GESTIONE SESSIONE ---
 if 'user_autenticato' not in st.session_state:
@@ -189,7 +189,7 @@ else:
         valido = True
         if q and tipo == "Targa":
             if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', q):
-                st.warning("⚠️ Formato Targa non valido (AB123CD)")
+                st.warning("⚠️ Formato Targa non valido (Esempio corretto: AB123CD)")
                 valido = False
 
         if q and valido:
@@ -236,7 +236,7 @@ else:
                         supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute()
                         registra_log(upd["targa"], "Modifica", "Correzione", utente_attivo); st.success("✅ Salvato!"); time.sleep(1); st.rerun()
 
-    # --- 11. ALTRE FUNZIONI & EXPORT FIX ---
+    # --- 11. ALTRE FUNZIONI ---
     elif scelta == "📊 Dashboard Zone":
         st.subheader("📍 Movimenti per Zona")
         z_sel = st.selectbox("Seleziona Zona", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}")
@@ -256,16 +256,16 @@ else:
                 st.warning("Nessuna vettura presente da esportare.")
             else:
                 df = pd.DataFrame(res.data)
-                # FIX EXPORT: Conversione data sicura prima di excel [cite: 2026-01-02]
-                df["Data"] = pd.to_datetime(df["created_at"]).dt.strftime("%d/%m/%Y %H:%M")
-                cols = ["targa", "marca_modello", "colore", "km", "numero_chiave", "zona_attuale", "Data", "note"]
-                df_out = df[cols].rename(columns=lambda x: x.replace('_', ' ').title())
+                df["Data Inserimento"] = pd.to_datetime(df["created_at"]).dt.strftime("%d/%m/%Y %H:%M")
+                # Fix Export colonne: targa, marca_modello, colore, km, numero_chiave, zona_attuale, Data Inserimento, note
+                cols_export = ["targa", "marca_modello", "colore", "km", "numero_chiave", "zona_attuale", "Data Inserimento", "note"]
+                df_out = df[cols_export].copy()
+                df_out.columns = [c.replace('_', ' ').title() for c in df_out.columns]
                 out = BytesIO()
                 with pd.ExcelWriter(out, engine="xlsxwriter") as w:
                     df_out.to_excel(w, index=False)
-                st.download_button("📥 Scarica Report Excel", out.getvalue(), f"Piazzale_{datetime.now().strftime('%d_%m_%H%M')}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        except Exception as e:
-            st.error(f"❌ Errore Export: {e}")
+                st.download_button("📥 Scarica Report", out.getvalue(), f"Piazzale_{datetime.now().strftime('%d_%m')}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        except Exception as e: st.error(f"❌ Errore Export: {e}")
 
     elif scelta == "📜 Log":
         st_autorefresh(interval=10000, key="log_ref")
@@ -283,8 +283,8 @@ else:
 
     elif scelta == "♻️ Ripristina":
         st.subheader("♻️ Ripristino Vetture Consegnate")
-        st.info("🤝 Numero della chiave con valore 0 = Vetture destinate ai commercianti")
-        targa_back = st.text_input("Targa da ripristinare").upper().strip()
+        # Ripristino solo tramite targa
+        targa_back = st.text_input("Inserisci Targa da ripristinare").upper().strip()
         if targa_back:
             res = supabase.table("parco_usato").select("*").eq("targa", targa_back).eq("stato", "CONSEGNATO").execute()
             if res.data:
@@ -292,6 +292,6 @@ else:
                 st.warning(f"Trovata: {v['marca_modello']} consegnata da {v['zona_attuale']}")
                 if st.button(f"RIPRISTINA {targa_back} NEL PIAZZALE"):
                     supabase.table("parco_usato").update({"stato": "PRESENTE"}).eq("targa", targa_back).execute()
-                    registra_log(targa_back, "Ripristino", "Riportata in PRESENTE", utente_attivo)
+                    registra_log(targa_back, "Ripristino", f"Riportata in PRESENTE da {utente_attivo}", utente_attivo)
                     st.success(f"✅ Vettura {targa_back} ripristinata!"); time.sleep(1); st.rerun()
-            else: st.error("Nessuna vettura 'CONSEGNATA' trovata.")
+            else: st.error("Nessuna vettura 'CONSEGNATA' trovata con questa targa.")
