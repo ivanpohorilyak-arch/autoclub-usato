@@ -236,7 +236,7 @@ else:
                         supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute()
                         registra_log(upd["targa"], "Modifica", "Correzione", utente_attivo); st.success("✅ Salvato!"); time.sleep(1); st.rerun()
 
-    # --- 11. ALTRE FUNZIONI & EXPORT ROBUSTO ---
+    # --- 11. ALTRE FUNZIONI & CAPACITY FIX ---
     elif scelta == "📊 Dashboard Zone":
         st.subheader("📍 Movimenti per Zona")
         z_sel = st.selectbox("Seleziona Zona", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}")
@@ -248,27 +248,36 @@ else:
                 st.metric("Movimenti", len(df))
                 st.dataframe(df[["Ora", "targa", "azione", "utente"]], use_container_width=True)
 
+    elif scelta == "📋 Verifica Zone":
+        st.subheader("📋 Analisi Capienza Piazzale")
+        z_v = st.selectbox("Seleziona Zona da analizzare", list(ZONE_INFO.values()))
+        res = supabase.table("parco_usato").select("*").eq("zona_attuale", z_v).eq("stato", "PRESENTE").execute()
+        occupati = len(res.data)
+        capienza_max = 100
+        percentuale = min(occupati / capienza_max, 1.0)
+        
+        c1, c2 = st.columns([1, 3])
+        c1.metric("Posti Occupati", f"{occupati}/{capienza_max}", delta=f"{capienza_max-occupati} liberi", delta_color="normal")
+        c2.write("📉 Livello di riempimento")
+        c2.progress(percentuale)
+        
+        if res.data:
+            st.dataframe(pd.DataFrame(res.data)[["targa", "marca_modello", "colore"]], use_container_width=True)
+        else:
+            st.info(f"La zona {z_v} è attualmente vuota.")
+
     elif scelta == "📊 Export":
         aggiorna_attivita()
         try:
             res = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE").execute()
-            if not res.data:
-                st.warning("Nessuna vettura presente da esportare.")
-            else:
-                # --- PATCH EXPORT ROBUSTO [cite: 2026-01-02] ---
+            if res.data:
                 df = pd.DataFrame(res.data)
-                if "created_at" in df.columns:
-                    df["Data Inserimento"] = pd.to_datetime(df["created_at"]).dt.strftime("%d/%m/%Y %H:%M")
-                else:
-                    df["Data Inserimento"] = ""
-                
+                df["Data Inserimento"] = pd.to_datetime(df["created_at"]).dt.strftime("%d/%m/%Y %H:%M") if "created_at" in df.columns else ""
                 cols_export = ["targa", "marca_modello", "colore", "km", "numero_chiave", "zona_attuale", "Data Inserimento", "note"]
                 df_out = df[cols_export].copy()
                 df_out.columns = [c.replace('_', ' ').title() for c in df_out.columns]
-                
                 out = BytesIO()
-                with pd.ExcelWriter(out, engine="xlsxwriter") as w:
-                    df_out.to_excel(w, index=False)
+                with pd.ExcelWriter(out, engine="xlsxwriter") as w: df_out.to_excel(w, index=False)
                 st.download_button("📥 Scarica Report", out.getvalue(), f"Piazzale_{datetime.now().strftime('%d_%m')}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         except Exception as e: st.error(f"❌ Errore Export: {e}")
 
@@ -276,8 +285,7 @@ else:
         st_autorefresh(interval=10000, key="log_ref")
         logs = supabase.table("log_movimenti").select("*").order("created_at", desc=True).limit(50).execute()
         if logs.data:
-            df_l = pd.DataFrame(logs.data)
-            df_l['Ora'] = pd.to_datetime(df_l['created_at']).dt.strftime('%d/%m/%Y %H:%M')
+            df_l = pd.DataFrame(logs.data); df_l['Ora'] = pd.to_datetime(df_l['created_at']).dt.strftime('%d/%m/%Y %H:%M')
             st.dataframe(df_l[["Ora", "targa", "azione", "utente"]], use_container_width=True)
 
     elif scelta == "🖨️ Stampa QR":
@@ -288,7 +296,8 @@ else:
 
     elif scelta == "♻️ Ripristina":
         st.subheader("♻️ Ripristino Vetture Consegnate")
-        targa_back = st.text_input("Inserisci Targa da ripristinare").upper().strip()
+        st.info("🤝 Numero della chiave con valore 0 = Vetture destinate ai commercianti")
+        targa_back = st.text_input("Targa da ripristinare").upper().strip()
         if targa_back:
             res = supabase.table("parco_usato").select("*").eq("targa", targa_back).eq("stato", "CONSEGNATO").execute()
             if res.data:
@@ -296,6 +305,6 @@ else:
                 st.warning(f"Trovata: {v['marca_modello']} consegnata da {v['zona_attuale']}")
                 if st.button(f"RIPRISTINA {targa_back} NEL PIAZZALE"):
                     supabase.table("parco_usato").update({"stato": "PRESENTE"}).eq("targa", targa_back).execute()
-                    registra_log(targa_back, "Ripristino", "Riportata in PRESENTE da {utente_attivo}", utente_attivo)
+                    registra_log(targa_back, "Ripristino", "Riportata in PRESENTE", utente_attivo)
                     st.success(f"✅ Vettura {targa_back} ripristinata!"); time.sleep(1); st.rerun()
-            else: st.error("Nessuna vettura 'CONSEGNATA' trovata con questa targa.")
+            else: st.error("Nessuna vettura 'CONSEGNATA' trovata.")
