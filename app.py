@@ -162,18 +162,12 @@ else:
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa):
                     st.warning("❌ Targa non valida")
                     st.stop()
-
                 if not m_sel or not m_sel.strip():
-                    st.warning("❌ Marca obbligatoria")
-                    st.stop()
-
+                    st.warning("❌ Marca obbligatoria"); st.stop()
                 if not mod_sel or not mod_sel.strip():
-                    st.warning("❌ Modello obbligatorio")
-                    st.stop()
-
+                    st.warning("❌ Modello obbligatorio"); st.stop()
                 if not colore or not colore.strip():
-                    st.warning("❌ Colore obbligatorio")
-                    st.stop()
+                    st.warning("❌ Colore obbligatorio"); st.stop()
 
                 # --- BLOCCO DOPPIO INSERIMENTO ---
                 check = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute()
@@ -194,10 +188,8 @@ else:
                     "stato": "PRESENTE",
                     "utente_ultimo_invio": utente_attivo
                 }
-                
                 supabase.table("parco_usato").insert(data).execute()
                 registra_log(targa, "Ingresso", f"In {st.session_state['zona_nome']}", utente_attivo)
-                
                 st.success("✅ Vettura registrata correttamente!")
                 st.session_state["zona_id"] = ""; st.session_state["zona_nome"] = ""
                 time.sleep(1); st.rerun()
@@ -249,8 +241,7 @@ else:
                                     supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute()
                                     registra_log(v['targa'], "Consegna", f"Uscita da {v['zona_attuale']}", utente_attivo)
                                     st.success("✅ CONSEGNA REGISTRATA"); time.sleep(1); st.rerun()
-                else:
-                    st.error(f"❌ Nessun veicolo trovato con {tipo}: {q}")
+                else: st.error(f"❌ Nessun veicolo trovato con {tipo}: {q}")
 
     # --- 10. MODIFICA ---
     elif scelta == "✏️ Modifica":
@@ -264,7 +255,7 @@ else:
             res = supabase.table("parco_usato").select("*").eq(col_f, val_f).eq("stato", "PRESENTE").execute()
             if res.data:
                 v = res.data[0]
-                st.info(f"📝 Modificando: **{v['targa']}** | {v['marca_modello']} | Zona: {v['zona_attuale']}")
+                st.info(f"📝 Modificando: **{v['targa']}** | {v['marca_modello']}")
                 with st.form("f_mod"):
                     z_nome_sel = st.selectbox("Zona", list(ZONE_INFO.values()), index=list(ZONE_INFO.values()).index(v['zona_attuale']) if v['zona_attuale'] in ZONE_INFO.values() else 0)
                     z_id_sel = next(k for k, val in ZONE_INFO.items() if val == z_nome_sel)
@@ -272,8 +263,7 @@ else:
                     if st.form_submit_button("SALVA"):
                         supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute()
                         registra_log(upd["targa"], "Modifica", "Correzione", utente_attivo); st.success("✅ Salvato!"); time.sleep(1); st.rerun()
-            else:
-                st.error("❌ Veicolo non trovato.")
+            else: st.error("❌ Veicolo non trovato.")
 
     # --- 11. ANALISI & UTILITY ---
     elif scelta == "📊 Dashboard Zone":
@@ -308,7 +298,15 @@ else:
             res = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE").execute()
             if res.data:
                 df = pd.DataFrame(res.data)
-                df["Data Inserimento"] = pd.to_datetime(df["created_at"]).dt.strftime("%d/%m/%Y %H:%M")
+                # --- PATCH EXPORT SICURO ---
+                if "created_at" in df.columns:
+                    df["Data Inserimento"] = (
+                        pd.to_datetime(df["created_at"], errors="coerce")
+                        .dt.strftime("%d/%m/%Y %H:%M")
+                    )
+                else:
+                    df["Data Inserimento"] = ""
+                # ---------------------------
                 cols_export = ["targa", "marca_modello", "colore", "km", "numero_chiave", "zona_attuale", "Data Inserimento", "note"]
                 df_out = df[cols_export].copy()
                 df_out.columns = [c.replace('_', ' ').title() for c in df_out.columns]
