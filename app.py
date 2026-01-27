@@ -28,7 +28,7 @@ ZONE_INFO = {
     "Z09": "Commercianti con telo", "Z10": "Lavorazioni esterni", "Z11": "Verso altre sedi"
 }
 
-st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1", layout="wide")
+st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1 Master", layout="wide")
 
 # --- 4. GESTIONE SESSIONE ---
 if 'user_autenticato' not in st.session_state:
@@ -157,7 +157,6 @@ else:
             n_chiave = st.number_input("N. Chiave", min_value=0, step=1)
             note = st.text_area("Note")
 
-            # PULSANTE ATTIVO SOLO DOPO SCANSIONE
             if st.form_submit_button("REGISTRA LA VETTURA", disabled=not st.session_state['zona_id']):
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa): st.warning("Targa non valida")
                 else:
@@ -187,12 +186,10 @@ else:
 
         tipo = st.radio("Cerca per:", ["Targa", "Numero Chiave"], horizontal=True)
         q = st.text_input("Dato da cercare").strip().upper()
-        
-        # VALIDAZIONE TARGA IN RICERCA
         valido = True
         if q and tipo == "Targa":
             if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', q):
-                st.warning("⚠️ Formato Targa non valido (Esempio corretto: AB123CD)")
+                st.warning("⚠️ Formato Targa non valido (AB123CD)")
                 valido = False
 
         if q and valido:
@@ -210,7 +207,6 @@ else:
                                 registra_log(v['targa'], "Spostamento", f"In {st.session_state['zona_nome_sposta']}", utente_attivo)
                                 st.session_state["zona_id_sposta"] = ""; st.session_state["zona_nome_sposta"] = ""
                                 st.success("✅ Spostata!"); time.sleep(1); st.rerun()
-
                             with c2:
                                 conf_key = f"conf_{v['targa']}_{v.get('zona_id', 'NA')}"
                                 if conf_key not in st.session_state: st.session_state[conf_key] = False
@@ -240,7 +236,7 @@ else:
                         supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute()
                         registra_log(upd["targa"], "Modifica", "Correzione", utente_attivo); st.success("✅ Salvato!"); time.sleep(1); st.rerun()
 
-    # --- 11. ALTRE FUNZIONI ---
+    # --- 11. ALTRE FUNZIONI & EXPORT FIX ---
     elif scelta == "📊 Dashboard Zone":
         st.subheader("📍 Movimenti per Zona")
         z_sel = st.selectbox("Seleziona Zona", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}")
@@ -256,14 +252,20 @@ else:
         aggiorna_attivita()
         try:
             res = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE").execute()
-            if res.data:
+            if not res.data:
+                st.warning("Nessuna vettura presente da esportare.")
+            else:
                 df = pd.DataFrame(res.data)
-                df["Data Inserimento"] = pd.to_datetime(df["created_at"]).dt.strftime("%d/%m/%Y %H:%M")
-                df = df.drop(columns=["id", "stato", "created_at"], errors="ignore")
+                # FIX EXPORT: Conversione data sicura prima di excel [cite: 2026-01-02]
+                df["Data"] = pd.to_datetime(df["created_at"]).dt.strftime("%d/%m/%Y %H:%M")
+                cols = ["targa", "marca_modello", "colore", "km", "numero_chiave", "zona_attuale", "Data", "note"]
+                df_out = df[cols].rename(columns=lambda x: x.replace('_', ' ').title())
                 out = BytesIO()
-                with pd.ExcelWriter(out, engine="xlsxwriter") as w: df.to_excel(w, index=False)
-                st.download_button("📥 Scarica Report", out.getvalue(), f"Piazzale_{datetime.now().strftime('%d_%m')}.xlsx")
-        except: st.error("❌ Errore Export")
+                with pd.ExcelWriter(out, engine="xlsxwriter") as w:
+                    df_out.to_excel(w, index=False)
+                st.download_button("📥 Scarica Report Excel", out.getvalue(), f"Piazzale_{datetime.now().strftime('%d_%m_%H%M')}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        except Exception as e:
+            st.error(f"❌ Errore Export: {e}")
 
     elif scelta == "📜 Log":
         st_autorefresh(interval=10000, key="log_ref")
@@ -281,6 +283,7 @@ else:
 
     elif scelta == "♻️ Ripristina":
         st.subheader("♻️ Ripristino Vetture Consegnate")
+        st.info("🤝 Numero della chiave con valore 0 = Vetture destinate ai commercianti")
         targa_back = st.text_input("Targa da ripristinare").upper().strip()
         if targa_back:
             res = supabase.table("parco_usato").select("*").eq("targa", targa_back).eq("stato", "CONSEGNATO").execute()
