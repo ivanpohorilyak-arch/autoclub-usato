@@ -302,7 +302,6 @@ else:
 
     elif scelta == "♻️ Ripristina":
         st.subheader("♻️ Ripristino Vetture Consegnate")
-        st.info("🤝 Numero della chiave con valore 0 = Vetture destinate ai commercianti")
         targa_back = st.text_input("Targa da ripristinare").upper().strip()
         if targa_back:
             res = supabase.table("parco_usato").select("*").eq("targa", targa_back).eq("stato", "CONSEGNATO").execute()
