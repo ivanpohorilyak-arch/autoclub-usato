@@ -158,10 +158,8 @@ else:
             note = st.text_area("Note")
 
             if st.form_submit_button("REGISTRA LA VETTURA", disabled=not st.session_state['zona_id']):
-                # --- VALIDAZIONI HARD ---
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa):
-                    st.warning("❌ Targa non valida")
-                    st.stop()
+                    st.warning("❌ Targa non valida"); st.stop()
                 if not m_sel or not m_sel.strip():
                     st.warning("❌ Marca obbligatoria"); st.stop()
                 if not mod_sel or not mod_sel.strip():
@@ -169,24 +167,15 @@ else:
                 if not colore or not colore.strip():
                     st.warning("❌ Colore obbligatorio"); st.stop()
 
-                # --- BLOCCO DOPPIO INSERIMENTO ---
                 check = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute()
                 if check.data:
-                    st.error("❌ Vettura già presente nel parco usato!")
-                    st.stop()
+                    st.error("❌ Vettura già presente nel parco usato!"); st.stop()
 
-                # --- INSERT SICURO ---
                 data = {
-                    "targa": targa,
-                    "marca_modello": f"{m_sel.strip()} {mod_sel.strip()}",
-                    "colore": colore.strip().capitalize(),
-                    "km": int(km),
-                    "numero_chiave": int(n_chiave),
-                    "zona_id": st.session_state["zona_id"],
-                    "zona_attuale": st.session_state["zona_nome"],
-                    "note": note,
-                    "stato": "PRESENTE",
-                    "utente_ultimo_invio": utente_attivo
+                    "targa": targa, "marca_modello": f"{m_sel.strip()} {mod_sel.strip()}",
+                    "colore": colore.strip().capitalize(), "km": int(km), "numero_chiave": int(n_chiave),
+                    "zona_id": st.session_state["zona_id"], "zona_attuale": st.session_state["zona_nome"],
+                    "note": note, "stato": "PRESENTE", "utente_ultimo_invio": utente_attivo
                 }
                 supabase.table("parco_usato").insert(data).execute()
                 registra_log(targa, "Ingresso", f"In {st.session_state['zona_nome']}", utente_attivo)
@@ -294,25 +283,25 @@ else:
             else: st.info(f"La zona **{ZONE_INFO[z_id_v]}** è vuota.")
 
     elif scelta == "📊 Export":
+        st.subheader("📊 Export Piazzale")
+        z_exp = st.selectbox("Seleziona Zona da esportare", ["TUTTE"] + list(ZONE_INFO.keys()), format_func=lambda x: "TUTTE LE ZONE" if x == "TUTTE" else f"{x} - {ZONE_INFO[x]}")
         try:
-            res = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE").execute()
+            q = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE")
+            if z_exp != "TUTTE": q = q.eq("zona_id", z_exp)
+            res = q.execute()
             if res.data:
                 df = pd.DataFrame(res.data)
-                # --- PATCH EXPORT SICURO ---
                 if "created_at" in df.columns:
-                    df["Data Inserimento"] = (
-                        pd.to_datetime(df["created_at"], errors="coerce")
-                        .dt.strftime("%d/%m/%Y %H:%M")
-                    )
-                else:
-                    df["Data Inserimento"] = ""
-                # ---------------------------
+                    df["Data Inserimento"] = pd.to_datetime(df["created_at"], errors="coerce").dt.strftime("%d/%m/%Y %H:%M")
+                else: df["Data Inserimento"] = ""
                 cols_export = ["targa", "marca_modello", "colore", "km", "numero_chiave", "zona_attuale", "Data Inserimento", "note"]
                 df_out = df[cols_export].copy()
                 df_out.columns = [c.replace('_', ' ').title() for c in df_out.columns]
                 out = BytesIO()
                 with pd.ExcelWriter(out, engine="xlsxwriter") as w: df_out.to_excel(w, index=False)
-                st.download_button("📥 Scarica Report", out.getvalue(), f"Piazzale_{datetime.now().strftime('%d_%m')}.xlsx")
+                nome = "TUTTE" if z_exp == "TUTTE" else z_exp
+                st.download_button("📥 Scarica Report", out.getvalue(), f"Piazzale_{nome}_{datetime.now().strftime('%d_%m')}.xlsx")
+            else: st.info("Nessun veicolo da esportare.")
         except Exception as e: st.error(f"❌ Errore Export: {e}")
 
     elif scelta == "📜 Log":
