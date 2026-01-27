@@ -158,6 +158,7 @@ else:
             note = st.text_area("Note")
 
             if st.form_submit_button("REGISTRA LA VETTURA", disabled=not st.session_state['zona_id']):
+                # --- VALIDAZIONI HARD ---
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa):
                     st.warning("❌ Targa non valida"); st.stop()
                 if not m_sel or not m_sel.strip():
@@ -167,10 +168,12 @@ else:
                 if not colore or not colore.strip():
                     st.warning("❌ Colore obbligatorio"); st.stop()
 
+                # --- BLOCCO DOPPIO INSERIMENTO ---
                 check = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute()
                 if check.data:
                     st.error("❌ Vettura già presente nel parco usato!"); st.stop()
 
+                # --- INSERT SICURO ---
                 data = {
                     "targa": targa, "marca_modello": f"{m_sel.strip()} {mod_sel.strip()}",
                     "colore": colore.strip().capitalize(), "km": int(km), "numero_chiave": int(n_chiave),
@@ -294,14 +297,19 @@ else:
                 if "created_at" in df.columns:
                     df["Data Inserimento"] = pd.to_datetime(df["created_at"], errors="coerce").dt.strftime("%d/%m/%Y %H:%M")
                 else: df["Data Inserimento"] = ""
+                
                 cols_export = ["targa", "marca_modello", "colore", "km", "numero_chiave", "zona_attuale", "Data Inserimento", "note"]
                 df_out = df[cols_export].copy()
+                
+                st.write(f"🔍 Anteprima dati ({len(df_out)} vetture trovate):")
+                st.dataframe(df_out, use_container_width=True)
+
                 df_out.columns = [c.replace('_', ' ').title() for c in df_out.columns]
                 out = BytesIO()
                 with pd.ExcelWriter(out, engine="xlsxwriter") as w: df_out.to_excel(w, index=False)
                 nome = "TUTTE" if z_exp == "TUTTE" else z_exp
-                st.download_button("📥 Scarica Report", out.getvalue(), f"Piazzale_{nome}_{datetime.now().strftime('%d_%m')}.xlsx")
-            else: st.info("Nessun veicolo da esportare.")
+                st.download_button("📥 Scarica Report Excel", out.getvalue(), f"Piazzale_{nome}_{datetime.now().strftime('%d_%m')}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            else: st.info("Nessun veicolo trovato per i criteri selezionati.")
         except Exception as e: st.error(f"❌ Errore Export: {e}")
 
     elif scelta == "📜 Log":
