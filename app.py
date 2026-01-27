@@ -28,7 +28,7 @@ ZONE_INFO = {
     "Z09": "Commercianti con telo", "Z10": "Lavorazioni esterni", "Z11": "Verso altre sedi"
 }
 
-st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1", layout="wide")
+st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1 Master", layout="wide")
 
 # --- 4. GESTIONE SESSIONE ---
 if 'user_autenticato' not in st.session_state:
@@ -236,7 +236,7 @@ else:
                         supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute()
                         registra_log(upd["targa"], "Modifica", "Correzione", utente_attivo); st.success("✅ Salvato!"); time.sleep(1); st.rerun()
 
-    # --- 11. ALTRE FUNZIONI ---
+    # --- 11. ALTRE FUNZIONI & EXPORT ROBUSTO ---
     elif scelta == "📊 Dashboard Zone":
         st.subheader("📍 Movimenti per Zona")
         z_sel = st.selectbox("Seleziona Zona", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}")
@@ -255,12 +255,17 @@ else:
             if not res.data:
                 st.warning("Nessuna vettura presente da esportare.")
             else:
+                # --- PATCH EXPORT ROBUSTO [cite: 2026-01-02] ---
                 df = pd.DataFrame(res.data)
-                df["Data Inserimento"] = pd.to_datetime(df["created_at"]).dt.strftime("%d/%m/%Y %H:%M")
-                # Fix Export colonne: targa, marca_modello, colore, km, numero_chiave, zona_attuale, Data Inserimento, note
+                if "created_at" in df.columns:
+                    df["Data Inserimento"] = pd.to_datetime(df["created_at"]).dt.strftime("%d/%m/%Y %H:%M")
+                else:
+                    df["Data Inserimento"] = ""
+                
                 cols_export = ["targa", "marca_modello", "colore", "km", "numero_chiave", "zona_attuale", "Data Inserimento", "note"]
                 df_out = df[cols_export].copy()
                 df_out.columns = [c.replace('_', ' ').title() for c in df_out.columns]
+                
                 out = BytesIO()
                 with pd.ExcelWriter(out, engine="xlsxwriter") as w:
                     df_out.to_excel(w, index=False)
@@ -283,7 +288,6 @@ else:
 
     elif scelta == "♻️ Ripristina":
         st.subheader("♻️ Ripristino Vetture Consegnate")
-        # Ripristino solo tramite targa
         targa_back = st.text_input("Inserisci Targa da ripristinare").upper().strip()
         if targa_back:
             res = supabase.table("parco_usato").select("*").eq("targa", targa_back).eq("stato", "CONSEGNATO").execute()
@@ -292,6 +296,6 @@ else:
                 st.warning(f"Trovata: {v['marca_modello']} consegnata da {v['zona_attuale']}")
                 if st.button(f"RIPRISTINA {targa_back} NEL PIAZZALE"):
                     supabase.table("parco_usato").update({"stato": "PRESENTE"}).eq("targa", targa_back).execute()
-                    registra_log(targa_back, "Ripristino", f"Riportata in PRESENTE da {utente_attivo}", utente_attivo)
+                    registra_log(targa_back, "Ripristino", "Riportata in PRESENTE da {utente_attivo}", utente_attivo)
                     st.success(f"✅ Vettura {targa_back} ripristinata!"); time.sleep(1); st.rerun()
             else: st.error("Nessuna vettura 'CONSEGNATA' trovata con questa targa.")
