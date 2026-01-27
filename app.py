@@ -152,10 +152,9 @@ else:
             if c_sug: st.info(f"🎨 Suggerito: **{c_sug}**")
             colore = st.selectbox("Colore", ["Nuovo..."] + get_colori())
             if colore == "Nuovo...": colore = st.text_input("Specifica Colore")
-            st.info("🤝 Numero della chiave con valore 0 = Vetture destinate ai commercianti")
             km = st.number_input("Chilometri", min_value=0, step=100)
             n_chiave = st.number_input("N. Chiave", min_value=0, step=1)
-            
+            st.info("🤝 Numero della chiave con valore 0 = Vetture destinate ai commercianti")
             note = st.text_area("Note")
 
             if st.form_submit_button("REGISTRA LA VETTURA", disabled=not st.session_state['zona_id']):
