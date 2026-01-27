@@ -140,14 +140,14 @@ else:
         with st.form("f_ingresso", clear_on_submit=True):
             if not st.session_state['zona_id']: st.error("❌ Scansione QR Obbligatoria per abilitare la registrazione")
             else: st.info(f"📍 Zona selezionata: **{st.session_state['zona_nome']}**")
-            
+           
             targa = st.text_input("TARGA").upper().strip()
             marche = get_marche()
             m_sel = st.selectbox("Marca", ["Nuova..."] + marche)
             if m_sel == "Nuova...": m_sel = st.text_input("Inserisci Marca").upper()
             mod_sel = st.selectbox("Modello", ["Nuovo..."] + get_modelli(m_sel))
             if mod_sel == "Nuovo...": mod_sel = st.text_input("Inserisci Modello").upper()
-            
+           
             c_sug = suggerisci_colore(targa) if targa else None
             if c_sug: st.info(f"🎨 Suggerito: **{c_sug}**")
             colore = st.selectbox("Colore", ["Nuovo..."] + get_colori())
@@ -158,17 +158,49 @@ else:
             note = st.text_area("Note")
 
             if st.form_submit_button("REGISTRA LA VETTURA", disabled=not st.session_state['zona_id']):
-                if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa): st.warning("Targa non valida")
-                else:
-                    check = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute()
-                    if check.data: st.error("❌ Vettura già presente!")
-                    else:
-                        data = {"targa": targa, "marca_modello": f"{m_sel} {mod_sel}".strip(), "colore": colore.strip().capitalize(), "km": km, "numero_chiave": n_chiave, "zona_id": st.session_state["zona_id"], "zona_attuale": st.session_state["zona_nome"], "note": note, "stato": "PRESENTE", "utente_ultimo_invio": utente_attivo}
-                        supabase.table("parco_usato").insert(data).execute()
-                        registra_log(targa, "Ingresso", f"In {st.session_state['zona_nome']}", utente_attivo)
-                        st.success("✅ Vettura registrata correttamente!")
-                        st.session_state["zona_id"] = ""; st.session_state["zona_nome"] = ""
-                        time.sleep(1); st.rerun()
+                # --- VALIDAZIONI HARD ---
+                if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa):
+                    st.warning("❌ Targa non valida")
+                    st.stop()
+
+                if not m_sel or not m_sel.strip():
+                    st.warning("❌ Marca obbligatoria")
+                    st.stop()
+
+                if not mod_sel or not mod_sel.strip():
+                    st.warning("❌ Modello obbligatorio")
+                    st.stop()
+
+                if not colore or not colore.strip():
+                    st.warning("❌ Colore obbligatorio")
+                    st.stop()
+
+                # --- BLOCCO DOPPIO INSERIMENTO ---
+                check = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute()
+                if check.data:
+                    st.error("❌ Vettura già presente nel parco usato!")
+                    st.stop()
+
+                # --- INSERT SICURO ---
+                data = {
+                    "targa": targa,
+                    "marca_modello": f"{m_sel.strip()} {mod_sel.strip()}",
+                    "colore": colore.strip().capitalize(),
+                    "km": int(km),
+                    "numero_chiave": int(n_chiave),
+                    "zona_id": st.session_state["zona_id"],
+                    "zona_attuale": st.session_state["zona_nome"],
+                    "note": note,
+                    "stato": "PRESENTE",
+                    "utente_ultimo_invio": utente_attivo
+                }
+                
+                supabase.table("parco_usato").insert(data).execute()
+                registra_log(targa, "Ingresso", f"In {st.session_state['zona_nome']}", utente_attivo)
+                
+                st.success("✅ Vettura registrata correttamente!")
+                st.session_state["zona_id"] = ""; st.session_state["zona_nome"] = ""
+                time.sleep(1); st.rerun()
 
     # --- 9. SEZIONE RICERCA / SPOSTA ---
     elif scelta == "🔍 Ricerca/Sposta":
@@ -187,11 +219,11 @@ else:
 
         tipo = st.radio("Cerca per:", ["Targa", "Numero Chiave"], horizontal=True)
         q = st.text_input("Dato da cercare").strip().upper()
-        
+       
         valido = True
         if q and tipo == "Targa":
             if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', q):
-                st.warning("⚠️ Formato Targa non valido (Esempio corretto: AB123CD)")
+                st.warning("⚠️ Formato Targa non valido (Esempio: AB123CD)")
                 valido = False
 
         if q and valido:
@@ -232,7 +264,6 @@ else:
             res = supabase.table("parco_usato").select("*").eq(col_f, val_f).eq("stato", "PRESENTE").execute()
             if res.data:
                 v = res.data[0]
-                # Feedback visivo dati attuali
                 st.info(f"📝 Modificando: **{v['targa']}** | {v['marca_modello']} | Zona: {v['zona_attuale']}")
                 with st.form("f_mod"):
                     z_nome_sel = st.selectbox("Zona", list(ZONE_INFO.values()), index=list(ZONE_INFO.values()).index(v['zona_attuale']) if v['zona_attuale'] in ZONE_INFO.values() else 0)
@@ -242,7 +273,7 @@ else:
                         supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute()
                         registra_log(upd["targa"], "Modifica", "Correzione", utente_attivo); st.success("✅ Salvato!"); time.sleep(1); st.rerun()
             else:
-                st.error("❌ Veicolo non trovato per la modifica.") # Feedback se non trova nulla in modifica [cite: 2026-01-02]
+                st.error("❌ Veicolo non trovato.")
 
     # --- 11. ANALISI & UTILITY ---
     elif scelta == "📊 Dashboard Zone":
@@ -265,8 +296,7 @@ else:
             capienza_max = 100
             percentuale = min(occupati / capienza_max, 1.0)
             c1, c2 = st.columns([1, 3])
-            c1.metric("Posti Occupati", f"{occupati}/{capienza_max}", delta=f"{capienza_max - occupati} liberi", delta_color="normal")
-            c2.write("📉 Livello di riempimento")
+            c1.metric("Posti Occupati", f"{occupati}/{capienza_max}", delta=f"{capienza_max - occupati} liberi")
             c2.progress(percentuale)
             if res.data:
                 df = pd.DataFrame(res.data)
@@ -274,18 +304,17 @@ else:
             else: st.info(f"La zona **{ZONE_INFO[z_id_v]}** è vuota.")
 
     elif scelta == "📊 Export":
-        aggiorna_attivita()
         try:
             res = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE").execute()
             if res.data:
                 df = pd.DataFrame(res.data)
-                df["Data Inserimento"] = pd.to_datetime(df["created_at"]).dt.strftime("%d/%m/%Y %H:%M") if "created_at" in df.columns else ""
+                df["Data Inserimento"] = pd.to_datetime(df["created_at"]).dt.strftime("%d/%m/%Y %H:%M")
                 cols_export = ["targa", "marca_modello", "colore", "km", "numero_chiave", "zona_attuale", "Data Inserimento", "note"]
                 df_out = df[cols_export].copy()
                 df_out.columns = [c.replace('_', ' ').title() for c in df_out.columns]
                 out = BytesIO()
                 with pd.ExcelWriter(out, engine="xlsxwriter") as w: df_out.to_excel(w, index=False)
-                st.download_button("📥 Scarica Report", out.getvalue(), f"Piazzale_{datetime.now().strftime('%d_%m')}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.download_button("📥 Scarica Report", out.getvalue(), f"Piazzale_{datetime.now().strftime('%d_%m')}.xlsx")
         except Exception as e: st.error(f"❌ Errore Export: {e}")
 
     elif scelta == "📜 Log":
@@ -302,15 +331,12 @@ else:
             st.image(buf.getvalue(), width=300); st.download_button("Scarica QR", buf.getvalue(), f"QR_{z_pr}.png")
 
     elif scelta == "♻️ Ripristina":
-        st.subheader("♻️ Ripristino Vetture Consegnate")
         targa_back = st.text_input("Targa da ripristinare").upper().strip()
         if targa_back:
             res = supabase.table("parco_usato").select("*").eq("targa", targa_back).eq("stato", "CONSEGNATO").execute()
             if res.data:
                 v = res.data[0]
-                st.warning(f"Trovata: {v['marca_modello']} consegnata da {v['zona_attuale']}")
-                if st.button(f"RIPRISTINA {targa_back} NEL PIAZZALE"):
+                if st.button(f"RIPRISTINA {targa_back}"):
                     supabase.table("parco_usato").update({"stato": "PRESENTE"}).eq("targa", targa_back).execute()
                     registra_log(targa_back, "Ripristino", "Riportata in PRESENTE", utente_attivo)
-                    st.success(f"✅ Vettura {targa_back} ripristinata!"); time.sleep(1); st.rerun()
-            else: st.error("Nessuna vettura 'CONSEGNATA' trovata con questa targa.")
+                    st.success("✅ Ripristinata!"); time.sleep(1); st.rerun()
