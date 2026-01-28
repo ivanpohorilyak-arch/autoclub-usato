@@ -118,7 +118,7 @@ controllo_timeout()
 
 # --- 6. LOGIN ---
 if st.session_state['user_autenticato'] is None:
-    st.title("🔐 Accesso Autoclub Center Usato 1.1 Master")
+    st.title("🔐 Accesso Autoclub Center Usato 1.1")
     u = st.selectbox("Operatore", ["- Seleziona -"] + list(CREDENZIALI.keys()))
     p = st.text_input("PIN", type="password")
     if st.button("ACCEDI"):
@@ -130,7 +130,7 @@ else:
     utente_attivo = st.session_state['user_autenticato']
     
     # --- MENU E SIDEBAR ---
-    menu = ["➕ Ingresso", "🔍 Ricerca/Sposta", "✏️ Modifica", "📋 Verifica Zone", "📊 Dashboard Zone", "📊 Export", "📜 Log", "🖨️ Stampa QR", "♻️ Ripristina"]
+    menu = ["➕ Ingresso", "🔍 Ricerca/Sposta", "✏️ Modifica", "📋 Verifica Zone", "📊 Dashboard Zone", "📊 Dashboard Generale", "📊 Export", "📜 Log", "🖨️ Stampa QR", "♻️ Ripristina"]
     scelta = st.radio("Seleziona Funzione", menu, horizontal=True)
     st.markdown("---")
     
@@ -286,6 +286,60 @@ else:
                         registra_log(upd["targa"], "Modifica", "Correzione", utente_attivo); st.success("✅ Salvato!"); time.sleep(1); st.rerun()
 
     # --- 11. ANALISI & UTILITY ---
+    elif scelta == "📊 Dashboard Generale":
+        st.subheader("📊 Dashboard Generale Piazzale")
+
+        presenti_res = supabase.table("parco_usato").select("targa, zona_id, created_at").eq("stato", "PRESENTE").execute()
+        consegnati_res = supabase.table("parco_usato").select("targa").eq("stato", "CONSEGNATO").execute()
+
+        presenti = presenti_res.data or []
+        consegnati = consegnati_res.data or []
+
+        kpi_presenti = len(presenti)
+        kpi_consegnate = len(consegnati)
+        zone_occupate = {v["zona_id"] for v in presenti if v.get("zona_id")}
+        kpi_zone = len(zone_occupate)
+
+        giorni = []
+        for v in presenti:
+            if v.get("created_at"):
+                giorni.append((datetime.now() - pd.to_datetime(v["created_at"])).days)
+
+        kpi_media = round(sum(giorni) / len(giorni), 1) if giorni else 0
+        kpi_critiche = len([g for g in giorni if g >= 30])
+
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("🚗 Presenti", kpi_presenti)
+        c2.metric("📦 Consegnate", kpi_consegnate)
+        c3.metric("📍 Zone attive", kpi_zone)
+        c4.metric("⏱️ Giorni medi", kpi_media)
+        c5.metric("⚠️ +30 giorni", kpi_critiche)
+
+        st.markdown("---")
+        st.subheader("📜 Attività di Oggi")
+
+        oggi = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        log_res = supabase.table("log_movimenti").select("created_at, targa, azione, utente").gte("created_at", oggi.isoformat()).order("created_at", desc=True).execute()
+
+        logs = log_res.data or []
+        movimenti_oggi = len(logs)
+        operatori_oggi = {l["utente"] for l in logs if l.get("utente")}
+        ingressi_oggi = sum(1 for l in logs if l.get("azione") == "Ingresso")
+        consegne_oggi = sum(1 for l in logs if l.get("azione") == "Consegna")
+
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("🔄 Movimenti oggi", movimenti_oggi)
+        k2.metric("👤 Operatori attivi", len(operatori_oggi))
+        k3.metric("➕ Ingressi", ingressi_oggi)
+        k4.metric("📦 Consegne", consegne_oggi)
+
+        if logs:
+            df_log = pd.DataFrame(logs)
+            df_log["Ora"] = pd.to_datetime(df_log["created_at"]).dt.strftime("%H:%M")
+            st.dataframe(df_log[["Ora", "targa", "azione", "utente"]], use_container_width=True)
+        else:
+            st.info("Nessuna attività registrata oggi.")
+
     elif scelta == "📊 Export":
         st.subheader("📊 Export Piazzale")
         z_exp = st.selectbox("Seleziona Zona da esportare", ["TUTTE"] + list(ZONE_INFO.keys()), format_func=lambda x: "TUTTE LE ZONE" if x == "TUTTE" else f"{x} - {ZONE_INFO[x]}")
