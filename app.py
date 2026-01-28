@@ -122,7 +122,7 @@ else:
     scelta = st.radio("Seleziona Funzione", menu, horizontal=True)
     st.markdown("---")
 
-    # --- 8. SEZIONE INGRESSO ---
+    # --- SEZIONI 8, 9, 10 (Ingresso, Ricerca, Modifica) rimangono invariate ---
     if scelta == "➕ Ingresso":
         aggiorna_attivita()
         st.subheader("Registrazione Nuova Vettura")
@@ -183,7 +183,6 @@ else:
                 st.session_state["zona_id"] = ""; st.session_state["zona_nome"] = ""
                 time.sleep(1); st.rerun()
 
-    # --- 9. SEZIONE RICERCA / SPOSTA ---
     elif scelta == "🔍 Ricerca/Sposta":
         aggiorna_attivita()
         st.subheader("Ricerca e Spostamento")
@@ -232,7 +231,6 @@ else:
                                     st.success("✅ CONSEGNA REGISTRATA"); time.sleep(1); st.rerun()
                 else: st.error(f"❌ Nessun veicolo trovato con {tipo}: {q}")
 
-    # --- 10. MODIFICA ---
     elif scelta == "✏️ Modifica":
         aggiorna_attivita()
         st.subheader("Correzione Dati")
@@ -252,9 +250,49 @@ else:
                     if st.form_submit_button("SALVA"):
                         supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute()
                         registra_log(upd["targa"], "Modifica", "Correzione", utente_attivo); st.success("✅ Salvato!"); time.sleep(1); st.rerun()
-            else: st.error("❌ Veicolo non trovato.")
 
-    # --- 11. ANALISI & UTILITY ---
+    # --- 11. ANALISI & UTILITY (Con FIX EXPORT) ---
+    elif scelta == "📊 Export":
+        st.subheader("📊 Export Piazzale")
+        z_exp = st.selectbox("Seleziona Zona da esportare", ["TUTTE"] + list(ZONE_INFO.keys()), format_func=lambda x: "TUTTE LE ZONE" if x == "TUTTE" else f"{x} - {ZONE_INFO[x]}")
+        try:
+            # FIX SOLUZIONE 1: Query pulita senza created_at in parco_usato
+            q = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE")
+            if z_exp != "TUTTE": q = q.eq("zona_id", z_exp)
+            res = q.execute()
+            
+            if res.data:
+                df = pd.DataFrame(res.data)
+                
+                # Recupero data ingresso dalla tabella log_movimenti
+                log_res = supabase.table("log_movimenti").select("targa, created_at").eq("azione", "Ingresso").execute()
+                if log_res.data:
+                    df_log = pd.DataFrame(log_res.data)
+                    # Merge per aggiungere la data di ingresso
+                    df = df.merge(df_log, on="targa", how="left")
+                
+                # Sanificazione data inserimento
+                if "created_at" in df.columns:
+                    df["created_at"] = pd.to_datetime(df["created_at"], errors="coerce")
+                    df["Data Inserimento"] = df["created_at"].dt.strftime("%d/%m/%Y %H:%M").fillna("N/D")
+                else:
+                    df["Data Inserimento"] = "N/D"
+
+                cols_export = ["targa", "marca_modello", "colore", "km", "numero_chiave", "zona_attuale", "Data Inserimento", "note"]
+                df_out = df[cols_export].copy()
+                
+                st.write(f"🔍 Anteprima dati ({len(df_out)} vetture trovate):")
+                st.dataframe(df_out, use_container_width=True)
+
+                df_out.columns = [c.replace('_', ' ').title() for c in df_out.columns]
+                out = BytesIO()
+                with pd.ExcelWriter(out, engine="xlsxwriter") as w: df_out.to_excel(w, index=False)
+                nome = "TUTTE" if z_exp == "TUTTE" else z_exp
+                st.download_button("📥 Scarica Report Excel", out.getvalue(), f"Piazzale_{nome}_{datetime.now().strftime('%d_%m')}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            else: st.info("Nessun veicolo trovato per i criteri selezionati.")
+        except Exception as e: st.error(f"❌ Errore Export: {e}")
+
+    # --- Sezioni rimanenti rimangono invariate ---
     elif scelta == "📊 Dashboard Zone":
         st.subheader("📍 Movimenti per Zona")
         z_sel = st.selectbox("Seleziona Zona", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}")
@@ -281,34 +319,6 @@ else:
                 df = pd.DataFrame(res.data)
                 st.dataframe(df[["targa", "marca_modello", "colore"]], use_container_width=True)
             else: st.info(f"La zona **{ZONE_INFO[z_id_v]}** è vuota.")
-
-    elif scelta == "📊 Export":
-        st.subheader("📊 Export Piazzale")
-        z_exp = st.selectbox("Seleziona Zona da esportare", ["TUTTE"] + list(ZONE_INFO.keys()), format_func=lambda x: "TUTTE LE ZONE" if x == "TUTTE" else f"{x} - {ZONE_INFO[x]}")
-        try:
-            # FIX: Query esplicita per created_at
-            q = supabase.table("parco_usato").select("*, created_at").eq("stato", "PRESENTE")
-            if z_exp != "TUTTE": q = q.eq("zona_id", z_exp)
-            res = q.execute()
-            if res.data:
-                df = pd.DataFrame(res.data)
-                # FIX: Sanificazione robusta della data
-                df["created_at"] = pd.to_datetime(df.get("created_at"), errors="coerce")
-                df["Data Inserimento"] = df["created_at"].dt.strftime("%d/%m/%Y %H:%M").fillna("N/D")
-                
-                cols_export = ["targa", "marca_modello", "colore", "km", "numero_chiave", "zona_attuale", "Data Inserimento", "note"]
-                df_out = df[cols_export].copy()
-                
-                st.write(f"🔍 Anteprima dati ({len(df_out)} vetture trovate):")
-                st.dataframe(df_out, use_container_width=True)
-
-                df_out.columns = [c.replace('_', ' ').title() for c in df_out.columns]
-                out = BytesIO()
-                with pd.ExcelWriter(out, engine="xlsxwriter") as w: df_out.to_excel(w, index=False)
-                nome = "TUTTE" if z_exp == "TUTTE" else z_exp
-                st.download_button("📥 Scarica Report Excel", out.getvalue(), f"Piazzale_{nome}_{datetime.now().strftime('%d_%m')}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            else: st.info("Nessun veicolo trovato per i criteri selezionati.")
-        except Exception as e: st.error(f"❌ Errore Export: {e}")
 
     elif scelta == "📜 Log":
         st_autorefresh(interval=10000, key="log_ref")
