@@ -122,7 +122,6 @@ else:
     scelta = st.radio("Seleziona Funzione", menu, horizontal=True)
     st.markdown("---")
 
-    # --- SEZIONI 8, 9, 10 (Ingresso, Ricerca, Modifica) rimangono invariate ---
     if scelta == "➕ Ingresso":
         aggiorna_attivita()
         st.subheader("Registrazione Nuova Vettura")
@@ -251,39 +250,28 @@ else:
                         supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute()
                         registra_log(upd["targa"], "Modifica", "Correzione", utente_attivo); st.success("✅ Salvato!"); time.sleep(1); st.rerun()
 
-    # --- 11. ANALISI & UTILITY (Con FIX EXPORT) ---
     elif scelta == "📊 Export":
         st.subheader("📊 Export Piazzale")
         z_exp = st.selectbox("Seleziona Zona da esportare", ["TUTTE"] + list(ZONE_INFO.keys()), format_func=lambda x: "TUTTE LE ZONE" if x == "TUTTE" else f"{x} - {ZONE_INFO[x]}")
         try:
-            # FIX SOLUZIONE 1: Query pulita senza created_at in parco_usato
             q = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE")
             if z_exp != "TUTTE": q = q.eq("zona_id", z_exp)
             res = q.execute()
-            
             if res.data:
                 df = pd.DataFrame(res.data)
-                
-                # Recupero data ingresso dalla tabella log_movimenti
                 log_res = supabase.table("log_movimenti").select("targa, created_at").eq("azione", "Ingresso").execute()
                 if log_res.data:
                     df_log = pd.DataFrame(log_res.data)
-                    # Merge per aggiungere la data di ingresso
                     df = df.merge(df_log, on="targa", how="left")
-                
-                # Sanificazione data inserimento
                 if "created_at" in df.columns:
                     df["created_at"] = pd.to_datetime(df["created_at"], errors="coerce")
                     df["Data Inserimento"] = df["created_at"].dt.strftime("%d/%m/%Y %H:%M").fillna("N/D")
                 else:
                     df["Data Inserimento"] = "N/D"
-
                 cols_export = ["targa", "marca_modello", "colore", "km", "numero_chiave", "zona_attuale", "Data Inserimento", "note"]
                 df_out = df[cols_export].copy()
-                
                 st.write(f"🔍 Anteprima dati ({len(df_out)} vetture trovate):")
                 st.dataframe(df_out, use_container_width=True)
-
                 df_out.columns = [c.replace('_', ' ').title() for c in df_out.columns]
                 out = BytesIO()
                 with pd.ExcelWriter(out, engine="xlsxwriter") as w: df_out.to_excel(w, index=False)
@@ -292,7 +280,6 @@ else:
             else: st.info("Nessun veicolo trovato per i criteri selezionati.")
         except Exception as e: st.error(f"❌ Errore Export: {e}")
 
-    # --- Sezioni rimanenti rimangono invariate ---
     elif scelta == "📊 Dashboard Zone":
         st.subheader("📍 Movimenti per Zona")
         z_sel = st.selectbox("Seleziona Zona", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}")
@@ -339,7 +326,10 @@ else:
             res = supabase.table("parco_usato").select("*").eq("targa", targa_back).eq("stato", "CONSEGNATO").execute()
             if res.data:
                 v = res.data[0]
+                st.success(f"✅ Vettura trovata: **{v['marca_modello']}** (Consegnata da: {v['zona_attuale']})")
                 if st.button(f"RIPRISTINA {targa_back}"):
                     supabase.table("parco_usato").update({"stato": "PRESENTE"}).eq("targa", targa_back).execute()
                     registra_log(targa_back, "Ripristino", "Riportata in PRESENTE", utente_attivo)
-                    st.success("✅ Ripristinata!"); time.sleep(1); st.rerun()
+                    st.success("✅ Ripristinata con successo!"); time.sleep(1); st.rerun()
+            else:
+                st.error(f"❌ Nessuna vettura con targa **{targa_back}** risulta nello stato 'CONSEGNATO'.")
