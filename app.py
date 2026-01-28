@@ -20,7 +20,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 CREDENZIALI = {"Luca Simonini": "2026", "Ivan Pohorilyak": "1234", "Abdul": "0000"}
 TIMEOUT_MINUTI = 15
 
-# --- 3. CONFIGURAZIONE ZONE BLINDATE ---
+# --- 3. CONFIGURAZIONE ZONE ---
 ZONE_INFO = {
     "Z01": "Deposito N.9", "Z02": "Deposito N.7", "Z03": "Deposito N.6 (Lavaggisti)",
     "Z04": "Deposito unificato 1 e 2", "Z05": "Showroom", "Z06": "Vetture vendute",
@@ -102,7 +102,7 @@ controllo_timeout()
 
 # --- 6. LOGIN ---
 if st.session_state['user_autenticato'] is None:
-    st.title("🔐 Accesso Autoclub Center Usato")
+    st.title("🔐 Accesso Autoclub Center Usato 1.1 Master")
     u = st.selectbox("Operatore", ["- Seleziona -"] + list(CREDENZIALI.keys()))
     p = st.text_input("PIN", type="password")
     if st.button("ACCEDI"):
@@ -158,7 +158,6 @@ else:
             note = st.text_area("Note")
 
             if st.form_submit_button("REGISTRA LA VETTURA", disabled=not st.session_state['zona_id']):
-                # --- VALIDAZIONI HARD ---
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa):
                     st.warning("❌ Targa non valida"); st.stop()
                 if not m_sel or not m_sel.strip():
@@ -168,12 +167,10 @@ else:
                 if not colore or not colore.strip():
                     st.warning("❌ Colore obbligatorio"); st.stop()
 
-                # --- BLOCCO DOPPIO INSERIMENTO ---
                 check = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute()
                 if check.data:
                     st.error("❌ Vettura già presente nel parco usato!"); st.stop()
 
-                # --- INSERT SICURO ---
                 data = {
                     "targa": targa, "marca_modello": f"{m_sel.strip()} {mod_sel.strip()}",
                     "colore": colore.strip().capitalize(), "km": int(km), "numero_chiave": int(n_chiave),
@@ -289,14 +286,15 @@ else:
         st.subheader("📊 Export Piazzale")
         z_exp = st.selectbox("Seleziona Zona da esportare", ["TUTTE"] + list(ZONE_INFO.keys()), format_func=lambda x: "TUTTE LE ZONE" if x == "TUTTE" else f"{x} - {ZONE_INFO[x]}")
         try:
-            q = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE")
+            # FIX: Query esplicita per created_at
+            q = supabase.table("parco_usato").select("*, created_at").eq("stato", "PRESENTE")
             if z_exp != "TUTTE": q = q.eq("zona_id", z_exp)
             res = q.execute()
             if res.data:
                 df = pd.DataFrame(res.data)
-                if "created_at" in df.columns:
-                    df["Data Inserimento"] = pd.to_datetime(df["created_at"], errors="coerce").dt.strftime("%d/%m/%Y %H:%M")
-                else: df["Data Inserimento"] = ""
+                # FIX: Sanificazione robusta della data
+                df["created_at"] = pd.to_datetime(df.get("created_at"), errors="coerce")
+                df["Data Inserimento"] = df["created_at"].dt.strftime("%d/%m/%Y %H:%M").fillna("N/D")
                 
                 cols_export = ["targa", "marca_modello", "colore", "km", "numero_chiave", "zona_attuale", "Data Inserimento", "note"]
                 df_out = df[cols_export].copy()
