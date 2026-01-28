@@ -53,6 +53,22 @@ def controllo_timeout():
             st.rerun()
 
 # --- 5. FUNZIONI CORE ---
+def aggiorna_presenza(utente, pagina=""):
+    try:
+        supabase.table("sessioni_attive").upsert({
+            "utente": utente,
+            "last_seen": datetime.now().isoformat(),
+            "pagina": pagina
+        }).execute()
+    except: pass
+
+def get_operatori_attivi(minuti=5):
+    try:
+        limite = (datetime.now() - timedelta(minutes=minuti)).isoformat()
+        res = supabase.table("sessioni_attive").select("*").gte("last_seen", limite).execute()
+        return res.data if res.data else []
+    except: return []
+
 def registra_log(targa, azione, d, u):
     try:
         supabase.table("log_movimenti").insert({"targa": targa, "azione": azione, "dettaglio": d, "utente": u}).execute()
@@ -112,16 +128,33 @@ if st.session_state['user_autenticato'] is None:
         else: st.error("Accesso negato")
 else:
     utente_attivo = st.session_state['user_autenticato']
+    
+    # --- MENU E SIDEBAR ---
+    menu = ["➕ Ingresso", "🔍 Ricerca/Sposta", "✏️ Modifica", "📋 Verifica Zone", "📊 Dashboard Zone", "📊 Export", "📜 Log", "🖨️ Stampa QR", "♻️ Ripristina"]
+    scelta = st.radio("Seleziona Funzione", menu, horizontal=True)
+    st.markdown("---")
+    
+    # Aggiorna presenza in tempo reale
+    aggiorna_presenza(utente_attivo, scelta)
+
     with st.sidebar:
         st.info(f"👤 {utente_attivo}")
+        
+        st.markdown("### 👥 Operatori attivi")
+        attivi = get_operatori_attivi(minuti=10)
+        if attivi:
+            for o in attivi:
+                stato = "🟢" if o["utente"] != utente_attivo else "🟡"
+                pagina = o.get("pagina", "")
+                st.caption(f"{stato} **{o['utente']}** \n_{pagina}_")
+        else: st.caption("Nessun altro operatore collegato")
+        
+        st.sidebar.markdown("---")
         st.sidebar.markdown("### 📷 Scanner QR")
         st.checkbox("Attiva scanner", key="camera_attiva")
         if st.button("Log-out"): st.session_state.clear(); st.rerun()
 
-    menu = ["➕ Ingresso", "🔍 Ricerca/Sposta", "✏️ Modifica", "📋 Verifica Zone", "📊 Dashboard Zone", "📊 Export", "📜 Log", "🖨️ Stampa QR", "♻️ Ripristina"]
-    scelta = st.radio("Seleziona Funzione", menu, horizontal=True)
-    st.markdown("---")
-
+    # --- 8. SEZIONE INGRESSO ---
     if scelta == "➕ Ingresso":
         aggiorna_attivita()
         st.subheader("Registrazione Nuova Vettura")
@@ -182,6 +215,7 @@ else:
                 st.session_state["zona_id"] = ""; st.session_state["zona_nome"] = ""
                 time.sleep(1); st.rerun()
 
+    # --- 9. SEZIONE RICERCA / SPOSTA ---
     elif scelta == "🔍 Ricerca/Sposta":
         aggiorna_attivita()
         st.subheader("Ricerca e Spostamento")
@@ -230,6 +264,7 @@ else:
                                     st.success("✅ CONSEGNA REGISTRATA"); time.sleep(1); st.rerun()
                 else: st.error(f"❌ Nessun veicolo trovato con {tipo}: {q}")
 
+    # --- 10. MODIFICA ---
     elif scelta == "✏️ Modifica":
         aggiorna_attivita()
         st.subheader("Correzione Dati")
@@ -250,6 +285,7 @@ else:
                         supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute()
                         registra_log(upd["targa"], "Modifica", "Correzione", utente_attivo); st.success("✅ Salvato!"); time.sleep(1); st.rerun()
 
+    # --- 11. ANALISI & UTILITY ---
     elif scelta == "📊 Export":
         st.subheader("📊 Export Piazzale")
         z_exp = st.selectbox("Seleziona Zona da esportare", ["TUTTE"] + list(ZONE_INFO.keys()), format_func=lambda x: "TUTTE LE ZONE" if x == "TUTTE" else f"{x} - {ZONE_INFO[x]}")
@@ -266,8 +302,7 @@ else:
                 if "created_at" in df.columns:
                     df["created_at"] = pd.to_datetime(df["created_at"], errors="coerce")
                     df["Data Inserimento"] = df["created_at"].dt.strftime("%d/%m/%Y %H:%M").fillna("N/D")
-                else:
-                    df["Data Inserimento"] = "N/D"
+                else: df["Data Inserimento"] = "N/D"
                 cols_export = ["targa", "marca_modello", "colore", "km", "numero_chiave", "zona_attuale", "Data Inserimento", "note"]
                 df_out = df[cols_export].copy()
                 st.write(f"🔍 Anteprima dati ({len(df_out)} vetture trovate):")
@@ -331,5 +366,4 @@ else:
                     supabase.table("parco_usato").update({"stato": "PRESENTE"}).eq("targa", targa_back).execute()
                     registra_log(targa_back, "Ripristino", "Riportata in PRESENTE", utente_attivo)
                     st.success("✅ Ripristinata con successo!"); time.sleep(1); st.rerun()
-            else:
-                st.error(f"❌ Nessuna vettura con targa **{targa_back}** risulta nello stato 'CONSEGNATO'.")
+            else: st.error(f"❌ Nessuna vettura con targa **{targa_back}** risulta nello stato 'CONSEGNATO'.")
