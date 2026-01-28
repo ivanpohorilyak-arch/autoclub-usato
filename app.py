@@ -28,7 +28,7 @@ ZONE_INFO = {
     "Z09": "Commercianti con telo", "Z10": "Lavorazioni esterni", "Z11": "Verso altre sedi"
 }
 
-st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1 Master", layout="wide")
+st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1", layout="wide")
 
 # --- 4. GESTIONE SESSIONE ---
 if 'user_autenticato' not in st.session_state:
@@ -118,7 +118,7 @@ controllo_timeout()
 
 # --- 6. LOGIN ---
 if st.session_state['user_autenticato'] is None:
-    st.title("🔐 Accesso Autoclub Center Usato 1.1")
+    st.title("🔐 Accesso Autoclub Center Usato 1.1 Master")
     u = st.selectbox("Operatore", ["- Seleziona -"] + list(CREDENZIALI.keys()))
     p = st.text_input("PIN", type="password")
     if st.button("ACCEDI"):
@@ -289,8 +289,9 @@ else:
     elif scelta == "📊 Dashboard Generale":
         st.subheader("📊 Dashboard Generale Piazzale")
 
-        presenti_res = supabase.table("parco_usato").select("targa, zona_id, created_at").eq("stato", "PRESENTE").execute()
-        consegnati_res = supabase.table("parco_usato").select("targa").eq("stato", "CONSEGNATO").execute()
+        # PATCH MINIMA APPLICATA
+        presenti_res = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE").execute()
+        consegnati_res = supabase.table("parco_usato").select("*").eq("stato", "CONSEGNATO").execute()
 
         presenti = presenti_res.data or []
         consegnati = consegnati_res.data or []
@@ -331,7 +332,7 @@ else:
         k1.metric("🔄 Movimenti oggi", movimenti_oggi)
         k2.metric("👤 Operatori attivi", len(operatori_oggi))
         k3.metric("➕ Ingressi", ingressi_oggi)
-        k4.metric("📦 Consegne", consegne_oggi)
+        k4.metric("📦 Consegne", consegnati_oggi if 'consegnati_oggi' in locals() else consegne_oggi)
 
         if logs:
             df_log = pd.DataFrame(logs)
