@@ -174,11 +174,12 @@ else:
                 else: st.error("❌ QR non valido")
         else: st.warning("⚠️ Scanner disattivato dalla Sidebar.")
 
-        with st.form("f_ingresso", clear_on_submit=True):
+        # FIX DEFINITIVO FORM: Rimozione clear_on_submit e aggiunta key ai campi
+        with st.form("f_ingresso"):
             if not st.session_state['zona_id']: st.error("❌ Scansione QR Obbligatoria per abilitare la registrazione")
             else: st.info(f"📍 Zona selezionata: **{st.session_state['zona_nome']}**")
            
-            targa = st.text_input("TARGA").upper().strip()
+            targa = st.text_input("TARGA", key="ing_targa").upper().strip()
             marche = get_marche()
             m_sel = st.selectbox("Marca", ["Nuova..."] + marche)
             if m_sel == "Nuova...": m_sel = st.text_input("Inserisci Marca").upper()
@@ -189,15 +190,16 @@ else:
             if c_sug: st.info(f"🎨 Suggerito: **{c_sug}**")
             colore = st.selectbox("Colore", ["Nuovo..."] + get_colori())
             if colore == "Nuovo...": colore = st.text_input("Specifica Colore")
-            km = st.number_input("Chilometri", min_value=0, step=100)
-            n_chiave = st.number_input("N. Chiave", min_value=0, step=1)
-            note = st.text_area("Note")
+            km = st.number_input("Chilometri", min_value=0, step=100, key="ing_km")
+            n_chiave = st.number_input("N. Chiave", min_value=0, step=1, key="ing_chiave")
+            note = st.text_area("Note", key="ing_note")
 
             if st.form_submit_button("REGISTRA LA VETTURA", disabled=not st.session_state['zona_id']):
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa):
                     st.warning("❌ Targa non valida"); st.stop()
                 check = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute()
                 if check.data: st.error("❌ Vettura già presente!"); st.stop()
+                
                 data_pulita = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
                 data = {
                     "targa": targa, "marca_modello": f"{m_sel.strip()} {mod_sel.strip()}",
@@ -207,10 +209,31 @@ else:
                 }
                 supabase.table("parco_usato").insert(data).execute()
                 registra_log(targa, "Ingresso", f"In {st.session_state['zona_nome']}", utente_attivo)
-                st.success("✅ Vettura registrata!"); st.session_state["zona_id"] = ""; st.session_state["zona_nome"] = ""
-                time.sleep(1); st.rerun()
+                
+                # FUMETTO VISIVO RIEPILOGO
+                st.success("✅ Vettura registrata correttamente")
+                st.markdown(
+                    f"""
+                    <div style="background-color:#0f172a; border-left:6px solid #22c55e; padding:16px; border-radius:8px; color:#e5e7eb; font-size:16px; margin-top:10px;">
+                        🚗 <b>{targa}</b><br>🏷️ <b>{m_sel} {mod_sel}</b><br>🎨 Colore: <b>{colore}</b><br>
+                        🔑 Chiave: <b>{n_chiave}</b><br>📍 Zona: <b>{st.session_state["zona_nome"]}</b><br>👤 Operatore: <b>{utente_attivo}</b>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+                
+                # VIBRAZIONE FEEDBACK
+                st.components.v1.html("""<script>if (navigator.vibrate) { navigator.vibrate([120, 60, 120]); }</script>""", height=0)
 
-    # --- 9. SEZIONE RICERCA / SPOSTA ---
+        # PULSANTE NUOVO INSERIMENTO
+        if st.session_state.get("ing_targa"):
+             if st.button("➕ NUOVO INSERIMENTO", use_container_width=True):
+                for k in ["ing_targa", "ing_km", "ing_chiave", "ing_note"]:
+                    if k in st.session_state: del st.session_state[k]
+                st.session_state["zona_id"] = ""; st.session_state["zona_nome"] = ""
+                st.rerun()
+
+    # --- SEZIONI RESTANTI INVARIATE ---
     elif scelta == "🔍 Ricerca/Sposta":
         aggiorna_attivita()
         st.subheader("Ricerca e Spostamento")
@@ -248,7 +271,6 @@ else:
                                     registra_log(v['targa'], "Consegna", f"Uscita da {v['zona_attuale']}", utente_attivo)
                                     st.success("✅ CONSEGNA REGISTRATA"); time.sleep(1); st.rerun()
 
-    # --- 10. MODIFICA ---
     elif scelta == "✏️ Modifica":
         aggiorna_attivita()
         st.subheader("Correzione Dati")
@@ -263,19 +285,13 @@ else:
                     v = res.data[0]
                     st.info(f"📝 Modificando: **{v['targa']}** | Chiave: **{v['numero_chiave']}**")
                     with st.form("f_mod"):
-                        upd = {
-                            "marca_modello": st.text_input("Modello", value=v['marca_modello']).upper(), 
-                            "colore": st.text_input("Colore", value=v['colore']).strip().capitalize(), 
-                            "km": st.number_input("KM", value=int(v['km'])), 
-                            "numero_chiave": st.number_input("Chiave", value=int(v['numero_chiave'])), 
-                            "note": st.text_area("Note", value=v['note'])
-                        }
+                        upd = {"marca_modello": st.text_input("Modello", value=v['marca_modello']).upper(), "colore": st.text_input("Colore", value=v['colore']).strip().capitalize(), "km": st.number_input("KM", value=int(v['km'])), "numero_chiave": st.number_input("Chiave", value=int(v['numero_chiave'])), "note": st.text_area("Note", value=v['note'])}
                         if st.form_submit_button("SALVA"):
                             supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute()
                             registra_log(v['targa'], "Modifica", "Correzione", utente_attivo)
                             st.success("✅ Salvato!"); time.sleep(1); st.rerun()
+                else: st.error(f"❌ Nessun veicolo presente trovato con {tipo_m}: {q_mod}")
 
-    # --- 11. DASHBOARD GENERALE ---
     elif scelta == "📊 Dashboard Generale":
         st.subheader("📊 Dashboard Generale Piazzale")
         presenti_res = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE").execute()
@@ -295,27 +311,18 @@ else:
         media = round(sum(giorni_validi) / len(giorni_validi), 1) if giorni_validi else 0
         critiche = len([g for g in giorni_validi if g >= 30])
         c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("🚗 Presenti", len(presenti))
-        c2.metric("📦 Consegnate", len(consegnati))
-        c3.metric("📍 Zone attive", len({v["zona_id"] for v in presenti if v.get("zona_id")}))
-        c4.metric("⏱️ Giorni medi", media)
-        c5.metric("⚠️ +30 giorni", critiche)
+        c1.metric("🚗 Presenti", len(presenti)); c2.metric("📦 Consegnate", len(consegnati)); c3.metric("📍 Zone attive", len({v["zona_id"] for v in presenti if v.get("zona_id")})); c4.metric("⏱️ Giorni medi", media); c5.metric("⚠️ +30 giorni", critiche)
         st.markdown("---")
         st.subheader("📜 Attività di Oggi")
         oggi = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         log_res = supabase.table("log_movimenti").select("*").gte("created_at", oggi.isoformat()).order("created_at", desc=True).execute()
         logs = log_res.data or []
         k1, k2, k3, k4 = st.columns(4)
-        k1.metric("🔄 Movimenti", len(logs))
-        k2.metric("👤 Operatori", len({l["utente"] for l in logs if l.get("utente")}))
-        k3.metric("➕ Ingressi", sum(1 for l in logs if l.get("azione") == "Ingresso"))
-        k4.metric("📦 Consegne", sum(1 for l in logs if l.get("azione") == "Consegna"))
+        k1.metric("🔄 Movimenti", len(logs)); k2.metric("👤 Operatori", len({l["utente"] for l in logs if l.get("utente")})); k3.metric("➕ Ingressi", sum(1 for l in logs if l.get("azione") == "Ingresso")); k4.metric("📦 Consegne", sum(1 for l in logs if l.get("azione") == "Consegna"))
         if logs:
-            df_log = pd.DataFrame(logs)
-            df_log["Ora"] = pd.to_datetime(df_log["created_at"]).dt.strftime("%H:%M")
+            df_log = pd.DataFrame(logs); df_log["Ora"] = pd.to_datetime(df_log["created_at"]).dt.strftime("%H:%M")
             st.dataframe(df_log[["Ora", "targa", "azione", "utente"]], use_container_width=True)
 
-    # --- 12. EXPORT ---
     elif scelta == "📊 Export":
         st.subheader("📊 Export Piazzale")
         z_exp = st.selectbox("Zona", ["TUTTE"] + list(ZONE_INFO.keys()))
@@ -330,14 +337,12 @@ else:
                     df["Data Inserimento"] = df["data_ingresso"].dt.strftime("%d/%m/%Y %H:%M")
                 else: df["Data Inserimento"] = "N/D"
                 cols = ["targa", "marca_modello", "colore", "km", "numero_chiave", "zona_attuale", "Data Inserimento", "note"]
-                df_out = df[cols].copy()
-                st.dataframe(df_out, use_container_width=True)
+                df_out = df[cols].copy(); st.dataframe(df_out, use_container_width=True)
                 out = BytesIO()
                 with pd.ExcelWriter(out, engine="xlsxwriter") as w: df_out.to_excel(w, index=False)
                 st.download_button("📥 Scarica Excel", out.getvalue(), f"Piazzale_{z_exp}.xlsx")
         except Exception as e: st.error(f"❌ Errore: {e}")
 
-    # --- 13. VERIFICA ZONE ---
     elif scelta == "📋 Verifica Zone":
         st.subheader("📋 Analisi Piazzale")
         z_id_v = st.selectbox("Zona da analizzare", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}")
@@ -347,19 +352,16 @@ else:
             df_zona = pd.DataFrame(res.data)
             st.dataframe(df_zona[["targa", "marca_modello", "colore", "numero_chiave"]], use_container_width=True)
 
-    # --- 14. DASHBOARD ZONE ---
     elif scelta == "📊 Dashboard Zone":
         st.subheader("📍 Storico Movimenti Zona")
         z_sel = st.selectbox("Seleziona Zona", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}")
         res = supabase.table("log_movimenti").select("*").ilike("dettaglio", f"%{ZONE_INFO[z_sel]}%").order("created_at", desc=True).limit(50).execute()
         if res.data:
             df = pd.DataFrame(res.data)
-            # 🔧 PATCH RETROCOMPATIBILITÀ
             if "numero_chiave" not in df.columns: df["numero_chiave"] = None
             df["Data/Ora"] = pd.to_datetime(df["created_at"], errors="coerce").dt.strftime("%d/%m/%Y %H:%M:%S")
             st.dataframe(df[["Data/Ora", "targa", "azione", "utente", "numero_chiave"]], use_container_width=True)
 
-    # --- 15. LOG ---
     elif scelta == "📜 Log":
         st_autorefresh(interval=10000, key="log_ref")
         operatori = ["TUTTI"] + sorted(set(CREDENZIALI.keys()))
@@ -380,37 +382,25 @@ else:
         logs = query.order("created_at", desc=True).limit(200).execute()
         if logs.data:
             df = pd.DataFrame(logs.data)
-            # 🔧 PATCH RETROCOMPATIBILITÀ
             if "numero_chiave" not in df.columns: df["numero_chiave"] = None
             df["Data/Ora"] = pd.to_datetime(df["created_at"], errors="coerce").dt.strftime("%d/%m/%Y %H:%M:%S")
-            
             st.markdown("### 📊 KPI Operatori")
             if not df.empty:
                 kpi_ops = df.groupby("utente").size().reset_index(name="Movimenti").sort_values("Movimenti", ascending=False)
                 c1, c2, c3 = st.columns(3)
                 top = kpi_ops.iloc[0]; c1.metric("🥇 Operatore più attivo", top["utente"]); c2.metric("🔄 Movimenti", int(top["Movimenti"])); c3.metric("👥 Operatori coinvolti", kpi_ops["utente"].nunique())
                 with st.expander("📋 Dettaglio movimenti per operatore"): st.dataframe(kpi_ops, use_container_width=True)
-
             st.markdown("### 📍 KPI Zone")
             if "dettaglio" in df.columns:
                 df_zone_kpi = df.copy()
                 df_zone_kpi["zona"] = df_zone_kpi["dettaglio"].str.replace("In ", "", regex=False)
-                # 🔧 KPI AGGREGATO ROBUSTO
-                kpi_zone = df_zone_kpi.groupby("zona").agg(
-                    Movimenti=("targa", "count"),
-                    Chiavi_coinvolte=("numero_chiave", lambda x: ", ".join(sorted({str(int(i)) for i in x.dropna() if str(i).isdigit()})))
-                ).reset_index().sort_values("Movimenti", ascending=False)
+                kpi_zone = df_zone_kpi.groupby("zona").agg(Movimenti=("targa", "count"), Chiavi_coinvolte=("numero_chiave", lambda x: ", ".join(sorted({str(int(i)) for i in x.dropna() if str(i).isdigit()})))).reset_index().sort_values("Movimenti", ascending=False)
                 if not kpi_zone.empty:
-                    z1, z2, z3 = st.columns(3)
-                    top_z = kpi_zone.iloc[0]
-                    z1.metric("🏆 Zona più movimentata", top_z["zona"])
-                    z2.metric("🔄 Movimenti", int(top_z["Movimenti"]))
-                    z3.metric("🔑 Chiavi coinvolte", len(top_z["Chiavi_coinvolte"].split(",")) if top_z["Chiavi_coinvolte"] else 0)
+                    z1, z2, z3 = st.columns(3); top_z = kpi_zone.iloc[0]
+                    z1.metric("🏆 Zona più movimentata", top_z["zona"]); z2.metric("🔄 Movimenti", int(top_z["Movimenti"])); z3.metric("🔑 Chiavi coinvolte", len(top_z["Chiavi_coinvolte"].split(",")) if top_z["Chiavi_coinvolte"] else 0)
                     with st.expander("📋 Dettaglio movimenti per zona (con chiavi)"): st.dataframe(kpi_zone, use_container_width=True)
-
             st.dataframe(df[["Data/Ora", "targa", "azione", "utente", "numero_chiave"]], use_container_width=True)
-            df_export = df.copy()
-            cols_export = ["Data/Ora", "targa", "azione", "utente", "numero_chiave", "dettaglio"]
+            df_export = df.copy(); cols_export = ["Data/Ora", "targa", "azione", "utente", "numero_chiave", "dettaglio"]
             out_log = BytesIO()
             with pd.ExcelWriter(out_log, engine="xlsxwriter") as w: df_export[cols_export].to_excel(w, index=False)
             st.download_button("📤 Scarica log Excel", out_log.getvalue(), f"log_movimenti_{datetime.now().strftime('%d_%m_%Y')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
