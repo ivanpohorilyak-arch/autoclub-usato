@@ -195,7 +195,6 @@ else:
                 if check.data:
                     st.error("❌ Vettura già presente!"); st.stop()
 
-                # PATCH DEFINITIVA: Aggiunta data_ingresso
                 data = {
                     "targa": targa, "marca_modello": f"{m_sel.strip()} {mod_sel.strip()}",
                     "colore": colore.strip().capitalize(), "km": int(km), "numero_chiave": int(n_chiave),
@@ -271,18 +270,31 @@ else:
         presenti = presenti_res.data or []
         consegnati = consegnati_res.data or []
 
+        # --- PATCH ANTI-CRASH AL 100% ---
         giorni = []
         for v in presenti:
-            # PATCH DEFINITIVA: Uso di data_ingresso per calcolo giorni medi
-            if v.get("data_ingresso"):
-                giorni.append((datetime.now() - pd.to_datetime(v["data_ingresso"])).days)
+            raw = v.get("data_ingresso")
+            if not raw:
+                continue
+            try:
+                data_ingresso = pd.to_datetime(raw, errors="coerce")
+                if pd.isna(data_ingresso):
+                    continue
+                giorni.append((datetime.now() - data_ingresso).days)
+            except Exception:
+                continue
+
+        giorni_validi = [g for g in giorni if g >= 0]
+        media = round(sum(giorni_validi) / len(giorni_validi), 1) if giorni_validi else 0
+        critiche = len([g for g in giorni_validi if g >= 30])
+        # -------------------------------
 
         c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("🚗 Presenti", len(presenti))
         c2.metric("📦 Consegnate", len(consegnati))
         c3.metric("📍 Zone attive", len({v["zona_id"] for v in presenti if v.get("zona_id")}))
-        c4.metric("⏱️ Giorni medi", round(sum(giorni) / len(giorni), 1) if giorni else 0)
-        c5.metric("⚠️ +30 giorni", len([g for g in giorni if g >= 30]))
+        c4.metric("⏱️ Giorni medi", media)
+        c5.metric("⚠️ +30 giorni", critiche)
 
         st.markdown("---")
         st.subheader("📜 Attività di Oggi")
@@ -311,7 +323,6 @@ else:
             res = q.execute()
             if res.data:
                 df = pd.DataFrame(res.data)
-                # PATCH DEFINITIVA: Uso di data_ingresso per colonna Export
                 if "data_ingresso" in df.columns:
                     df["data_ingresso"] = pd.to_datetime(df["data_ingresso"], errors="coerce")
                     df["Data Inserimento"] = df["data_ingresso"].dt.strftime("%d/%m/%Y %H:%M")
@@ -326,7 +337,7 @@ else:
                 st.download_button("📥 Scarica Excel", out.getvalue(), f"Piazzale_{z_exp}.xlsx")
         except Exception as e: st.error(f"❌ Errore: {e}")
 
-    # --- RESTO DEL CODICE (Logs, QR, Ripristina) INVARIATO ---
+    # --- RESTO DEL CODICE INVARIATO ---
     elif scelta == "📋 Verifica Zone":
         st.subheader("📋 Analisi Piazzale")
         z_id_v = st.selectbox("Zona da analizzare", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}")
