@@ -33,7 +33,7 @@ ZONE_INFO = {
     "Z09": "Commercianti con telo", "Z10": "Lavorazioni esterni", "Z11": "Verso altre sedi"
 }
 
-st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1 Master", layout="wide")
+st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1", layout="wide")
 
 # --- 4. GESTIONE SESSIONE ---
 if 'user_autenticato' not in st.session_state:
@@ -373,15 +373,35 @@ else:
 
     elif scelta == "📜 Log":
         st_autorefresh(interval=10000, key="log_ref")
+        
+        # 1️⃣ FILTRO LOG PER OPERATORE
+        operatori = ["TUTTI"] + sorted(set(CREDENZIALI.keys()))
+        operatore_sel = st.selectbox("👤 Filtra per operatore", operatori)
 
-        logs = (
-            supabase
-            .table("log_movimenti")
-            .select("*")
-            .order("created_at", desc=True)
-            .limit(50)
-            .execute()
+        # 📆 2️⃣ FILTRO DATA (oggi / ieri / settimana)
+        periodo = st.radio(
+            "📆 Periodo",
+            ["Oggi", "Ieri", "Ultimi 7 giorni", "Tutto"],
+            horizontal=True
         )
+
+        query = supabase.table("log_movimenti").select("*")
+
+        if operatore_sel != "TUTTI":
+            query = query.eq("utente", operatore_sel)
+
+        oggi_dt = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+        if periodo == "Oggi":
+            query = query.gte("created_at", oggi_dt.isoformat())
+        elif periodo == "Ieri":
+            ieri_dt = oggi_dt - timedelta(days=1)
+            query = query.gte("created_at", ieri_dt.isoformat()).lt("created_at", oggi_dt.isoformat())
+        elif periodo == "Ultimi 7 giorni":
+            settimana_dt = oggi_dt - timedelta(days=7)
+            query = query.gte("created_at", settimana_dt.isoformat())
+
+        logs = query.order("created_at", desc=True).limit(200).execute()
 
         if logs.data:
             df = pd.DataFrame(logs.data)
@@ -395,6 +415,26 @@ else:
             st.dataframe(
                 df[["Data/Ora", "targa", "azione", "utente"]],
                 use_container_width=True
+            )
+
+            # 📤 3️⃣ EXPORT LOG EXCEL (1 click)
+            df_export = df.copy()
+            df_export["Data/Ora"] = (
+                pd.to_datetime(df_export["created_at"], errors="coerce")
+                .dt.strftime("%d/%m/%Y %H:%M:%S")
+            )
+            cols_export = ["Data/Ora", "targa", "azione", "utente", "dettaglio"]
+            df_export = df_export[cols_export]
+
+            out_log = BytesIO()
+            with pd.ExcelWriter(out_log, engine="xlsxwriter") as w:
+                df_export.to_excel(w, index=False)
+
+            st.download_button(
+                "📤 Scarica log Excel",
+                out_log.getvalue(),
+                f"log_movimenti_{datetime.now().strftime('%d_%m_%Y')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
     elif scelta == "🖨️ Stampa QR":
