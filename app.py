@@ -108,7 +108,6 @@ def get_marche():
 
 def get_modelli(marca):
     try:
-        if not marca: return []
         res = supabase.table("parco_usato").select("marca_modello").execute()
         modelli = {r["marca_modello"].upper().replace(marca.upper(), "").strip() for r in res.data if r.get("marca_modello") and r["marca_modello"].upper().startswith(marca.upper())}
         return sorted([m for m in modelli if m])
@@ -194,39 +193,15 @@ else:
             else: st.info(f"📍 Zona selezionata: **{st.session_state['zona_nome']}**")
            
             targa = st.text_input("TARGA", key="ing_targa").upper().strip()
-
-            # ---------- MARCA ----------
-            marche = get_marche()
+            
+            # --- CODICE FINALE CORRETTO (PULITO) ---
             marca = st.text_input("Marca", key="marca_input").upper().strip()
-            sug_marche = [m for m in marche if m.startswith(marca)] if marca else marche[:5]
-            if sug_marche:
-                sel_marca = st.selectbox("Suggerimenti Marca", [""] + sug_marche, key="marca_sug")
-                if sel_marca:
-                    marca = sel_marca
-                    st.session_state["marca_input"] = sel_marca
-
-            # ---------- MODELLO ----------
-            modelli = get_modelli(marca) if marca else []
             modello = st.text_input("Modello", key="modello_input").upper().strip()
-            sug_mod = [m for m in modelli if m.startswith(modello)] if modello else modelli[:5]
-            if sug_mod:
-                sel_mod = st.selectbox("Suggerimenti Modello", [""] + sug_mod, key="modello_sug")
-                if sel_mod:
-                    modello = sel_mod
-                    st.session_state["modello_input"] = sel_mod
-           
+            
             c_sug = suggerisci_colore(targa) if targa else None
             if c_sug: st.info(f"🎨 Suggerito: **{c_sug}**")
-
-            # ---------- COLORE ----------
-            colori = get_colori()
+            
             colore = st.text_input("Colore", key="colore_input").capitalize().strip()
-            sug_col = [c for c in colori if c.lower().startswith(colore.lower())] if colore else colori
-            if sug_col:
-                sel_col = st.selectbox("Suggerimenti Colore", [""] + sug_col, key="colore_sug")
-                if sel_col:
-                    colore = sel_col
-                    st.session_state["colore_input"] = sel_col
 
             km = st.number_input("Chilometri", min_value=0, step=100, key="ing_km")
             n_chiave = st.number_input("N. Chiave", min_value=0, step=1, key="ing_chiave")
@@ -236,6 +211,7 @@ else:
             if st.form_submit_button("REGISTRA LA VETTURA", disabled=not st.session_state['zona_id']):
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa):
                     st.warning("❌ Targa non valida"); st.stop()
+                
                 if not marca or not modello or not colore:
                     st.error("❌ Marca, Modello e Colore sono obbligatori"); st.stop()
                 
@@ -260,7 +236,7 @@ else:
         if st.session_state.get("ingresso_salvato"):
             st.markdown("---")
             if st.button("➕ NUOVO INGRESSO", use_container_width=True):
-                for k in ["ing_targa", "ing_km", "ing_chiave", "ing_note", "marca_input", "marca_sug", "modello_input", "modello_sug", "colore_input", "colore_sug"]:
+                for k in ["ing_targa", "ing_km", "ing_chiave", "ing_note", "marca_input", "modello_input", "colore_input"]:
                     if k in st.session_state: del st.session_state[k]
                 st.session_state["zona_id"] = ""; st.session_state["zona_nome"] = ""
                 st.session_state["ingresso_salvato"] = False
