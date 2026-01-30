@@ -108,7 +108,7 @@ def get_marche():
 
 def get_modelli(marca):
     try:
-        if not marca or marca == "Nuova...": return []
+        if not marca or marca == "Nuova..." or marca == "": return []
         res = supabase.table("parco_usato").select("marca_modello").execute()
         modelli = {r["marca_modello"].upper().replace(marca.upper(), "").strip() for r in res.data if r.get("marca_modello") and r["marca_modello"].upper().startswith(marca.upper())}
         return sorted([m for m in modelli if m])
@@ -195,36 +195,36 @@ else:
            
             targa = st.text_input("TARGA", key="ing_targa").upper().strip()
             
-            # --- Pattern Marca ---
+            # --- Pattern Robusto Marca ---
             marche = get_marche()
-            marca_sel = st.selectbox("Marca", ["Nuova..."] + marche, key="marca_sel")
+            marca_sel = st.selectbox("Marca", ["- Seleziona -", "Nuova..."] + marche, key="marca_sel")
+            marca_finale = ""
             if marca_sel == "Nuova...":
                 st.info("✍️ Inserisci nuova marca")
                 marca_finale = st.text_input("Inserisci nuova Marca", key="marca_nuova").upper().strip()
-            else:
+            elif marca_sel != "- Seleziona -":
                 marca_finale = marca_sel
 
-            # --- Pattern Modello (FIX) ---
+            # --- Pattern Robusto Modello ---
             mod_list = get_modelli(marca_finale)
-            if not mod_list:
+            modello_sel = st.selectbox("Modello", ["- Seleziona -", "Nuovo..."] + mod_list, key="modello_sel")
+            modello_finale = ""
+            if modello_sel == "Nuovo...":
                 st.info("✍️ Inserisci nuovo modello")
                 modello_finale = st.text_input("Inserisci nuovo Modello", key="modello_nuovo").upper().strip()
-            else:
-                modello_sel = st.selectbox("Modello", ["Nuovo..."] + mod_list, key="modello_sel")
-                if modello_sel == "Nuovo...":
-                    modello_finale = st.text_input("Inserisci nuovo Modello", key="modello_nuovo").upper().strip()
-                else:
-                    modello_finale = modello_sel
+            elif modello_sel != "- Seleziona -":
+                modello_finale = modello_sel
            
             c_sug = suggerisci_colore(targa) if targa else None
             if c_sug: st.info(f"🎨 Suggerito: **{c_sug}**")
             
-            # --- Pattern Colore ---
-            colori_list = get_colori()
-            colore_sel = st.selectbox("Colore", ["Nuovo..."] + colori_list, key="colore_sel")
+            # --- Pattern Robusto Colore ---
+            colori = get_colori()
+            colore_sel = st.selectbox("Colore", ["- Seleziona -", "Nuovo..."] + colori, key="colore_sel")
+            colore_finale = ""
             if colore_sel == "Nuovo...":
                 colore_finale = st.text_input("Specifica Colore", key="colore_nuovo").strip().capitalize()
-            else:
+            elif colore_sel != "- Seleziona -":
                 colore_finale = colore_sel
 
             km = st.number_input("Chilometri", min_value=0, step=100, key="ing_km")
@@ -236,6 +236,7 @@ else:
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa):
                     st.warning("❌ Targa non valida"); st.stop()
                 
+                # Validazione finale obbligatoria
                 if not marca_finale or not modello_finale or not colore_finale:
                     st.error("❌ Marca, Modello e Colore sono obbligatori")
                     st.stop()
@@ -278,8 +279,7 @@ else:
             val = q if tipo == "Targa" else int(q) if q.isdigit() else None
             if val is not None:
                 res = supabase.table("parco_usato").select("*").eq(col, val).eq("stato", "PRESENTE").execute()
-                if not feedback_ricerca(tipo, q, res.data): 
-                    st.stop()
+                if not feedback_ricerca(tipo, q, res.data): st.stop()
                 for v in res.data:
                     with st.expander(f"🚗 {v['targa']} - {v['marca_modello']}", expanded=True):
                         st.write(f"📍 Posizione attuale: **{v['zona_attuale']}**")
@@ -293,25 +293,18 @@ else:
                                     st.session_state["zona_id_sposta"] = z_id_sp
                                     st.session_state["zona_nome_sposta"] = ZONE_INFO[z_id_sp]
                                     st.success(f"📍 Destinazione rilevata: **{st.session_state['zona_nome_sposta']}**")
-                                else:
-                                    st.error("❌ QR Zona non valido")
-                        else:
-                            st.warning("📷 Attiva lo scanner nella Sidebar per abilitare lo spostamento")
+                                else: st.error("❌ QR Zona non valido")
+                        else: st.warning("📷 Attiva lo scanner nella Sidebar per abilitare lo spostamento")
 
                         if not st.session_state['zona_id_sposta']:
                             st.caption("ℹ️ Per spostare questa vettura, scansiona il **QR della zona di arrivo**.")
                         
                         c1, c2 = st.columns(2)
                         if c1.button("SPOSTA QUI", key=f"b_{v['targa']}", disabled=not st.session_state['zona_id_sposta'], use_container_width=True):
-                            supabase.table("parco_usato").update({
-                                "zona_id": st.session_state["zona_id_sposta"], 
-                                "zona_attuale": st.session_state["zona_nome_sposta"]
-                            }).eq("targa", v['targa']).execute()
+                            supabase.table("parco_usato").update({"zona_id": st.session_state["zona_id_sposta"], "zona_attuale": st.session_state["zona_nome_sposta"]}).eq("targa", v['targa']).execute()
                             registra_log(v['targa'], "Spostamento", f"In {st.session_state['zona_nome_sposta']}", utente_attivo)
-                            st.session_state["zona_id_sposta"] = ""
-                            st.session_state["zona_nome_sposta"] = ""
-                            st.success("✅ Vettura Spostata!")
-                            time.sleep(1); st.rerun()
+                            st.session_state["zona_id_sposta"] = ""; st.session_state["zona_nome_sposta"] = ""
+                            st.success("✅ Vettura Spostata!"); time.sleep(1); st.rerun()
                         
                         with c2:
                             conf_key = f"conf_{v['targa']}"
@@ -320,8 +313,7 @@ else:
                             if st.button("🔴 CONSEGNA", key=f"btn_{v['targa']}", disabled=not st.session_state[conf_key], use_container_width=True):
                                 supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute()
                                 registra_log(v['targa'], "Consegna", f"Uscita da {v['zona_attuale']}", utente_attivo)
-                                st.success("✅ CONSEGNA REGISTRATA")
-                                time.sleep(1); st.rerun()
+                                st.success("✅ CONSEGNA REGISTRATA"); time.sleep(1); st.rerun()
 
     # --- 10. ALTRE SEZIONI ---
     elif scelta == "✏️ Modifica":
