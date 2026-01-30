@@ -33,7 +33,7 @@ ZONE_INFO = {
     "Z09": "Commercianti con telo", "Z10": "Lavorazioni esterni", "Z11": "Verso altre sedi"
 }
 
-st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1", layout="wide")
+st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1 Master", layout="wide")
 
 # --- 4. GESTIONE SESSIONE ---
 if 'user_autenticato' not in st.session_state:
@@ -385,10 +385,16 @@ else:
             horizontal=True
         )
 
+        # 🔎 RICERCA TARGA
+        targa_search = st.text_input("🔎 Cerca targa (parziale o completa)").upper().strip()
+
         query = supabase.table("log_movimenti").select("*")
 
         if operatore_sel != "TUTTI":
             query = query.eq("utente", operatore_sel)
+
+        if targa_search:
+            query = query.ilike("targa", f"%{targa_search}%")
 
         oggi_dt = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
@@ -411,6 +417,23 @@ else:
                 pd.to_datetime(df["created_at"], errors="coerce")
                 .dt.strftime("%d/%m/%Y %H:%M:%S")
             )
+
+            # 📊 KPI LOG — “CHI LAVORA DI PIÙ”
+            st.markdown("### 📊 KPI Operatori")
+            if not df.empty:
+                kpi = (
+                    df.groupby("utente")
+                    .size()
+                    .reset_index(name="Movimenti")
+                    .sort_values("Movimenti", ascending=False)
+                )
+                c1, c2, c3 = st.columns(3)
+                top = kpi.iloc[0]
+                c1.metric("🥇 Operatore più attivo", top["utente"])
+                c2.metric("🔄 Movimenti", int(top["Movimenti"]))
+                c3.metric("👥 Operatori coinvolti", kpi["utente"].nunique())
+                with st.expander("📋 Dettaglio movimenti per operatore"):
+                    st.dataframe(kpi, use_container_width=True)
 
             st.dataframe(
                 df[["Data/Ora", "targa", "azione", "utente"]],
