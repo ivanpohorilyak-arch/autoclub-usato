@@ -108,7 +108,7 @@ def get_marche():
 
 def get_modelli(marca):
     try:
-        if not marca or marca == "Nuova..." or marca == "": return []
+        if not marca or marca == "": return []
         res = supabase.table("parco_usato").select("marca_modello").execute()
         modelli = {r["marca_modello"].upper().replace(marca.upper(), "").strip() for r in res.data if r.get("marca_modello") and r["marca_modello"].upper().startswith(marca.upper())}
         return sorted([m for m in modelli if m])
@@ -189,7 +189,6 @@ else:
                 else: st.error("❌ QR non valido")
         else: st.warning("⚠️ Scanner disattivato dalla Sidebar.")
 
-        # --- LOGICA DI SELEZIONE FUORI DALLA FORM PER REATTIVITÀ IMMEDIATA ---
         if not st.session_state['zona_id']: 
             st.error("❌ Scansione QR Obbligatoria per abilitare la registrazione")
         else:
@@ -197,40 +196,43 @@ else:
             
             targa = st.text_input("TARGA", key="ing_targa").upper().strip()
             
-            # MARCA
+            # --- 🏷️ Pattern Marca ---
             marche = get_marche()
-            marca_sel = st.selectbox("Marca", ["- Seleziona -", "Nuova..."] + marche, key="marca_sel")
-            if marca_sel == "Nuova...":
-                marca_finale = st.text_input("Inserisci nuova Marca", key="marca_nuova").upper().strip()
-            elif marca_sel == "- Seleziona -":
-                marca_finale = ""
-            else:
-                marca_finale = marca_sel
+            marca_input = st.text_input("Marca (Scrivi o seleziona sotto)", key="marca_input").upper().strip()
+            suggerite_marca = [m for m in marche if m.startswith(marca_input)] if marca_input else marche[:5]
+            if suggerite_marca:
+                sel_m = st.selectbox("Suggerimenti Marca", [""] + suggerite_marca, key="marca_sug")
+                if sel_m: 
+                    marca_input = sel_m
+                    st.session_state["marca_input"] = sel_m
+            marca_finale = marca_input
 
-            # MODELLO
-            mod_list = get_modelli(marca_finale)
-            modello_sel = st.selectbox("Modello", ["- Seleziona -", "Nuovo..."] + mod_list, key="modello_sel")
-            if modello_sel == "Nuovo...":
-                modello_finale = st.text_input("Inserisci nuovo Modello", key="modello_nuovo").upper().strip()
-            elif modello_sel == "- Seleziona -":
-                modello_finale = ""
-            else:
-                modello_finale = modello_sel
+            # --- 🚗 Pattern Modello ---
+            modelli = get_modelli(marca_finale)
+            modello_input = st.text_input("Modello (Scrivi o seleziona sotto)", key="modello_input").upper().strip()
+            suggeriti_mod = [m for m in modelli if m.startswith(modello_input)] if modello_input else modelli[:5]
+            if suggeriti_mod:
+                sel_mod = st.selectbox("Suggerimenti Modello", [""] + suggeriti_mod, key="modello_sug")
+                if sel_mod: 
+                    modello_input = sel_mod
+                    st.session_state["modello_input"] = sel_mod
+            modello_finale = modello_input
             
-            # COLORE
             c_sug = suggerisci_colore(targa) if targa else None
-            if c_sug: st.info(f"🎨 Suggerito: **{c_sug}**")
+            if c_sug: st.info(f"🎨 Suggerito per questa targa: **{c_sug}**")
             
+            # --- 🎨 Pattern Colore ---
             colori = get_colori()
-            colore_sel = st.selectbox("Colore", ["- Seleziona -", "Nuovo..."] + colori, key="colore_sel")
-            if colore_sel == "Nuovo...":
-                colore_finale = st.text_input("Specifica Colore", key="colore_nuovo").strip().capitalize()
-            elif colore_sel == "- Seleziona -":
-                colore_finale = ""
-            else:
-                colore_finale = colore_sel
+            colore_input = st.text_input("Colore (Scrivi o seleziona sotto)", key="colore_input").capitalize().strip()
+            suggeriti_col = [c for c in colori if c.lower().startswith(colore_input.lower())] if colore_input else colori
+            if suggeriti_col:
+                sel_c = st.selectbox("Suggerimenti Colore", [""] + suggeriti_col, key="colore_sug")
+                if sel_c: 
+                    colore_input = sel_c
+                    st.session_state["colore_input"] = sel_c
+            colore_finale = colore_input
 
-            # --- FORM SOLO PER I DATI FISSI E SUBMIT ---
+            # --- FORM DI REGISTRAZIONE ---
             with st.form("f_ingresso"):
                 km = st.number_input("Chilometri", min_value=0, step=100, key="ing_km")
                 n_chiave = st.number_input("N. Chiave", min_value=0, step=1, key="ing_chiave")
@@ -240,7 +242,6 @@ else:
                 if st.form_submit_button("REGISTRA LA VETTURA"):
                     if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa):
                         st.warning("❌ Targa non valida"); st.stop()
-                    
                     if not marca_finale or not modello_finale or not colore_finale:
                         st.error("❌ Marca, Modello e Colore sono obbligatori"); st.stop()
 
@@ -265,10 +266,9 @@ else:
         if st.session_state.get("ingresso_salvato"):
             st.markdown("---")
             if st.button("➕ NUOVO INGRESSO", use_container_width=True):
-                for k in ["ing_targa", "ing_km", "ing_chiave", "ing_note", "marca_sel", "marca_nuova", "modello_sel", "modello_nuovo", "colore_sel", "colore_nuovo"]:
+                for k in ["ing_targa", "ing_km", "ing_chiave", "ing_note", "marca_input", "modello_input", "colore_input", "marca_sug", "modello_sug", "colore_sug"]:
                     if k in st.session_state: del st.session_state[k]
-                st.session_state["zona_id"] = ""; st.session_state["zona_nome"] = ""
-                st.session_state["ingresso_salvato"] = False
+                st.session_state["zona_id"] = ""; st.session_state["zona_nome"] = ""; st.session_state["ingresso_salvato"] = False
                 st.rerun()
 
     # --- 9. SEZIONE RICERCA / SPOSTA (INTATTA) ---
