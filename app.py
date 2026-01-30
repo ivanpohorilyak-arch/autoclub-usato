@@ -20,6 +20,11 @@ supabase = create_client(
     os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 )
 
+# 🔎 TEST DIRETTO (DEBUG)
+test = supabase.table("parco_usato").select("*").execute()
+st.write("DEBUG parco_usato:", test.data)
+st.stop()
+
 # --- 2. CREDENZIALI & TIMEOUT ---
 CREDENZIALI = {"Luca Simonini": "2026", "Ivan Pohorilyak": "1234", "Abdul": "0000", "Tommaso Zani": "1111", "Andrea Sachetti": "2345"}
 TIMEOUT_MINUTI = 15
