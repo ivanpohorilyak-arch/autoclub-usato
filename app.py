@@ -195,41 +195,38 @@ else:
            
             targa = st.text_input("TARGA", key="ing_targa").upper().strip()
             
-            # --- FIX UX Marca ---
+            # --- Pattern Marca ---
             marche = get_marche()
             marca_sel = st.selectbox("Marca", ["- Seleziona -", "Nuova..."] + marche, key="marca_sel")
-            marca_finale = ""
-            if marca_sel == "- Seleziona -":
-                st.info("⬆️ Seleziona una marca o scegli *Nuova...*")
-            elif marca_sel == "Nuova...":
+            if marca_sel == "Nuova...":
                 st.info("✍️ Inserisci nuova marca")
                 marca_finale = st.text_input("Inserisci nuova Marca", key="marca_nuova").upper().strip()
+            elif marca_sel == "- Seleziona -":
+                marca_finale = ""
             else:
                 marca_finale = marca_sel
 
-            # --- FIX UX Modello ---
+            # --- Pattern Modello ---
             mod_list = get_modelli(marca_finale)
             modello_sel = st.selectbox("Modello", ["- Seleziona -", "Nuovo..."] + mod_list, key="modello_sel")
-            modello_finale = ""
-            if modello_sel == "- Seleziona -":
-                st.info("⬆️ Seleziona un modello o scegli *Nuovo...*")
-            elif modello_sel == "Nuovo...":
+            if modello_sel == "Nuovo...":
                 st.info("✍️ Inserisci nuovo modello")
                 modello_finale = st.text_input("Inserisci nuovo Modello", key="modello_nuovo").upper().strip()
+            elif modello_sel == "- Seleziona -":
+                modello_finale = ""
             else:
                 modello_finale = modello_sel
            
             c_sug = suggerisci_colore(targa) if targa else None
             if c_sug: st.info(f"🎨 Suggerito: **{c_sug}**")
             
-            # --- FIX UX Colore ---
+            # --- Pattern Colore ---
             colori = get_colori()
             colore_sel = st.selectbox("Colore", ["- Seleziona -", "Nuovo..."] + colori, key="colore_sel")
-            colore_finale = ""
-            if colore_sel == "- Seleziona -":
-                st.info("⬆️ Seleziona un colore o scegli *Nuovo...*")
-            elif colore_sel == "Nuovo...":
+            if colore_sel == "Nuovo...":
                 colore_finale = st.text_input("Specifica Colore", key="colore_nuovo").strip().capitalize()
+            elif colore_sel == "- Seleziona -":
+                colore_finale = ""
             else:
                 colore_finale = colore_sel
 
@@ -320,7 +317,7 @@ else:
                                 registra_log(v['targa'], "Consegna", f"Uscita da {v['zona_attuale']}", utente_attivo)
                                 st.success("✅ CONSEGNA REGISTRATA"); time.sleep(1); st.rerun()
 
-    # --- SEZIONI RESTANTI INVARIATE ---
+    # --- 10. ALTRE SEZIONI ---
     elif scelta == "✏️ Modifica":
         aggiorna_attivita()
         st.subheader("Correzione Dati")
