@@ -251,16 +251,33 @@ else:
     elif scelta == "✏️ Modifica":
         aggiorna_attivita()
         st.subheader("Correzione Dati")
-        q_mod = st.text_input("Targa da modificare").strip().upper()
+        # Ricerca per Targa o Numero Chiave
+        tipo_m = st.radio("Cerca per:", ["Targa", "Numero Chiave"], horizontal=True, key="m_search_type")
+        q_mod = st.text_input("Inserisci valore da cercare").strip().upper()
+        
         if q_mod:
-            res = supabase.table("parco_usato").select("*").eq("targa", q_mod).eq("stato", "PRESENTE").execute()
-            if res.data:
-                v = res.data[0]
-                with st.form("f_mod"):
-                    upd = {"marca_modello": st.text_input("Modello", value=v['marca_modello']).upper(), "colore": st.text_input("Colore", value=v['colore']).strip().capitalize(), "km": st.number_input("KM", value=int(v['km'])), "numero_chiave": st.number_input("Chiave", value=int(v['numero_chiave'])), "note": st.text_area("Note", value=v['note'])}
-                    if st.form_submit_button("SALVA"):
-                        supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute()
-                        registra_log(v['targa'], "Modifica", "Correzione", utente_attivo); st.success("✅ Salvato!"); time.sleep(1); st.rerun()
+            col_m = "targa" if tipo_m == "Targa" else "numero_chiave"
+            val_m = q_mod if tipo_m == "Targa" else int(q_mod) if q_mod.isdigit() else None
+            
+            if val_m is not None:
+                res = supabase.table("parco_usato").select("*").eq(col_m, val_m).eq("stato", "PRESENTE").execute()
+                if res.data:
+                    v = res.data[0]
+                    st.info(f"📝 Modificando: **{v['targa']}** | Chiave: **{v['numero_chiave']}**")
+                    with st.form("f_mod"):
+                        upd = {
+                            "marca_modello": st.text_input("Modello", value=v['marca_modello']).upper(), 
+                            "colore": st.text_input("Colore", value=v['colore']).strip().capitalize(), 
+                            "km": st.number_input("KM", value=int(v['km'])), 
+                            "numero_chiave": st.number_input("Chiave", value=int(v['numero_chiave'])), 
+                            "note": st.text_area("Note", value=v['note'])
+                        }
+                        if st.form_submit_button("SALVA"):
+                            supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute()
+                            registra_log(v['targa'], "Modifica", "Correzione", utente_attivo)
+                            st.success("✅ Salvato!"); time.sleep(1); st.rerun()
+                else:
+                    st.error(f"❌ Nessun veicolo presente trovato con {tipo_m}: {q_mod}")
 
     # --- 11. DASHBOARD GENERALE ---
     elif scelta == "📊 Dashboard Generale":
@@ -270,24 +287,19 @@ else:
         presenti = presenti_res.data or []
         consegnati = consegnati_res.data or []
 
-        # --- PATCH ANTI-CRASH AL 100% ---
         giorni = []
         for v in presenti:
             raw = v.get("data_ingresso")
-            if not raw:
-                continue
+            if not raw: continue
             try:
                 data_ingresso = pd.to_datetime(raw, errors="coerce")
-                if pd.isna(data_ingresso):
-                    continue
+                if pd.isna(data_ingresso): continue
                 giorni.append((datetime.now() - data_ingresso).days)
-            except Exception:
-                continue
+            except Exception: continue
 
         giorni_validi = [g for g in giorni if g >= 0]
         media = round(sum(giorni_validi) / len(giorni_validi), 1) if giorni_validi else 0
         critiche = len([g for g in giorni_validi if g >= 30])
-        # -------------------------------
 
         c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("🚗 Presenti", len(presenti))
@@ -326,8 +338,7 @@ else:
                 if "data_ingresso" in df.columns:
                     df["data_ingresso"] = pd.to_datetime(df["data_ingresso"], errors="coerce")
                     df["Data Inserimento"] = df["data_ingresso"].dt.strftime("%d/%m/%Y %H:%M")
-                else:
-                    df["Data Inserimento"] = "N/D"
+                else: df["Data Inserimento"] = "N/D"
                 
                 cols = ["targa", "marca_modello", "colore", "km", "numero_chiave", "zona_attuale", "Data Inserimento", "note"]
                 df_out = df[cols].copy()
@@ -337,7 +348,7 @@ else:
                 st.download_button("📥 Scarica Excel", out.getvalue(), f"Piazzale_{z_exp}.xlsx")
         except Exception as e: st.error(f"❌ Errore: {e}")
 
-    # --- RESTO DEL CODICE INVARIATO ---
+    # --- UTILITY REMAINING ---
     elif scelta == "📋 Verifica Zone":
         st.subheader("📋 Analisi Piazzale")
         z_id_v = st.selectbox("Zona da analizzare", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}")
