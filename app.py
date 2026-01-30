@@ -21,9 +21,12 @@ supabase = create_client(
 )
 
 # 🔎 TEST DIRETTO (DEBUG)
-test = supabase.table("parco_usato").select("*").execute()
-st.write("DEBUG parco_usato:", test.data)
-st.stop()
+res = supabase.table("parco_usato").select("*").execute()
+df = pd.DataFrame(res.data)
+
+st.write("RIGHE TOTALI:", len(df))
+st.write("VALORI UNICI STATO:", df["stato"].unique())
+st.write("VALORI UNICI ZONA:", df["zona"].unique())
 
 # --- 2. CREDENZIALI & TIMEOUT ---
 CREDENZIALI = {"Luca Simonini": "2026", "Ivan Pohorilyak": "1234", "Abdul": "0000", "Tommaso Zani": "1111", "Andrea Sachetti": "2345"}
