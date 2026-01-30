@@ -22,7 +22,7 @@ supabase = create_client(
 )
 
 # --- 2. CREDENZIALI & TIMEOUT ---
-CREDENZIALI = {"Luca Simonini": "2026", "Ivan Pohorilyak": "1234", "Abdul": "0000", "Tommaso Zani": "1111", "Andrea Sachetti": "2345"}
+CREDENZIALI = {"Luca Simonini": "2026", "Ivan Pohorilyak": "1234", "Abdul": "0000", "Tommaso Zani": "1111", "Andrea Sachetti": "2345", "Roberto Gozzi": "3412" }
 TIMEOUT_MINUTI = 15
 
 # --- 3. CONFIGURAZIONE ZONE ---
