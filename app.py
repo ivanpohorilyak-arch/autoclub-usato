@@ -195,7 +195,6 @@ else:
                 if check.data:
                     st.error("❌ Vettura già presente!"); st.stop()
 
-                # PATCH DEFINITIVA: Formato data pulito senza millesimi e fuso orario
                 data_pulita = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
                 data = {
@@ -350,7 +349,6 @@ else:
                 st.download_button("📥 Scarica Excel", out.getvalue(), f"Piazzale_{z_exp}.xlsx")
         except Exception as e: st.error(f"❌ Errore: {e}")
 
-    # --- UTILITY REMAINING ---
     elif scelta == "📋 Verifica Zone":
         st.subheader("📋 Analisi Piazzale")
         z_id_v = st.selectbox("Zona da analizzare", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}")
@@ -362,7 +360,16 @@ else:
         st.subheader("📍 Storico Movimenti Zona")
         z_sel = st.selectbox("Seleziona Zona", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}")
         res = supabase.table("log_movimenti").select("*").ilike("dettaglio", f"%{ZONE_INFO[z_sel]}%").order("created_at", desc=True).limit(50).execute()
-        if res.data: st.dataframe(pd.DataFrame(res.data)[["created_at", "targa", "azione", "utente"]], use_container_width=True)
+        if res.data:
+            df = pd.DataFrame(res.data)
+            df["Data/Ora"] = (
+                pd.to_datetime(df["created_at"], errors="coerce")
+                .dt.strftime("%d/%m/%Y %H:%M:%S")
+            )
+            st.dataframe(
+                df[["Data/Ora", "targa", "azione", "utente"]],
+                use_container_width=True
+            )
 
     elif scelta == "📜 Log":
         st_autorefresh(interval=10000, key="log_ref")
