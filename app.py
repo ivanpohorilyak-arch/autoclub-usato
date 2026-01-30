@@ -1,4 +1,5 @@
 import streamlit as st
+import os
 from supabase import create_client
 import pandas as pd
 from datetime import datetime, timedelta
@@ -12,9 +13,10 @@ import qrcode
 from PIL import Image
 
 # --- 1. CONFIGURAZIONE DATABASE ---
-SUPABASE_URL = "https://ihhypwraskzhjovyvwxd.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImloaHlwd3Jhc2t6aGpvdnl2d3hkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkxODM4MDQsImV4cCI6MjA4NDc1OTgwNH0.E5R3nUzfkcJz1J1wr3LYxKEtLA9-8cvbsh56sEURpqA"
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase = create_client(
+    os.environ["SUPABASE_URL"],
+    os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+)
 
 # --- 2. CREDENZIALI & TIMEOUT ---
 CREDENZIALI = {"Luca Simonini": "2026", "Ivan Pohorilyak": "1234", "Abdul": "0000", "Tommaso Zani": "1111", "Andrea Sachetti": "2345"}
