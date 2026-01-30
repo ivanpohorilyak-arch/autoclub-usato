@@ -144,7 +144,7 @@ controllo_timeout()
 
 # --- 6. LOGIN ---
 if st.session_state['user_autenticato'] is None:
-    st.title("🔐 Accesso Autoclub Center Usato 1.1")
+    st.title("🔐 Accesso Autoclub Center Usato 1.1 Master")
     u = st.selectbox("Operatore", ["- Seleziona -"] + list(CREDENZIALI.keys()))
     p = st.text_input("PIN", type="password")
     if st.button("ACCEDI"):
@@ -195,21 +195,25 @@ else:
            
             targa = st.text_input("TARGA", key="ing_targa").upper().strip()
 
-            # 🏷️ MARCA (Patch Mirata)
+            # 🏷️ MARCA (Patch Sicura)
             marche = get_marche()
             marca_sel = st.selectbox("Marca", ["- Seleziona -", "Nuovo..."] + marche, key="marca_sel")
+            marca_nuova = st.text_input("Inserisci nuova Marca", key="marca_nuova", disabled=(marca_sel != "Nuovo...")).upper().strip()
+
             if marca_sel == "Nuovo...":
-                marca_finale = st.text_input("Inserisci nuova Marca").upper().strip()
+                marca_finale = marca_nuova
             elif marca_sel != "- Seleziona -":
                 marca_finale = marca_sel
             else:
                 marca_finale = ""
 
-            # 🚗 MODELLO (Patch Mirata)
-            modelli = get_modelli(marca_finale) if marca_finale else []
+            # 🚗 MODELLO (Patch Sicura)
+            modelli = get_modelli(marca_finale) if marca_sel != "Nuovo..." else []
             modello_sel = st.selectbox("Modello", ["- Seleziona -", "Nuovo..."] + modelli, key="modello_sel")
+            modello_nuovo = st.text_input("Inserisci nuovo Modello", key="modello_nuovo", disabled=(modello_sel != "Nuovo...")).upper().strip()
+
             if modello_sel == "Nuovo...":
-                modello_finale = st.text_input("Inserisci nuovo Modello").upper().strip()
+                modello_finale = modello_nuovo
             elif modello_sel != "- Seleziona -":
                 modello_finale = modello_sel
             else:
@@ -218,11 +222,13 @@ else:
             c_sug = suggerisci_colore(targa) if targa else None
             if c_sug: st.info(f"🎨 Suggerito: **{c_sug}**")
 
-            # 🎨 COLORE (Patch Mirata)
+            # 🎨 COLORE (Patch Sicura)
             colori = get_colori()
             colore_sel = st.selectbox("Colore", ["- Seleziona -", "Nuovo..."] + colori, key="colore_sel")
+            colore_nuovo = st.text_input("Inserisci nuovo Colore", key="colore_nuovo", disabled=(colore_sel != "Nuovo...")).strip().capitalize()
+
             if colore_sel == "Nuovo...":
-                colore_finale = st.text_input("Inserisci nuovo Colore").strip().capitalize()
+                colore_finale = colore_nuovo
             elif colore_sel != "- Seleziona -":
                 colore_finale = colore_sel
             else:
@@ -260,7 +266,7 @@ else:
         if st.session_state.get("ingresso_salvato"):
             st.markdown("---")
             if st.button("➕ NUOVO INGRESSO", use_container_width=True):
-                for k in ["ing_targa", "ing_km", "ing_chiave", "ing_note", "marca_sel", "modello_sel", "colore_sel"]:
+                for k in ["ing_targa", "ing_km", "ing_chiave", "ing_note", "marca_sel", "marca_nuova", "modello_sel", "modello_nuovo", "colore_sel", "colore_nuovo"]:
                     if k in st.session_state: del st.session_state[k]
                 st.session_state["zona_id"] = ""; st.session_state["zona_nome"] = ""
                 st.session_state["ingresso_salvato"] = False
