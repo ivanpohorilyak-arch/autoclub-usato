@@ -12,6 +12,9 @@ from streamlit_autorefresh import st_autorefresh
 import qrcode
 from PIL import Image
 
+# DEBUG TEMPORANEO (serve solo ora)
+st.error(os.environ["SUPABASE_SERVICE_ROLE_KEY"][:30])
+
 # --- 1. CONFIGURAZIONE DATABASE ---
 supabase = create_client(
     os.environ["SUPABASE_URL"],
