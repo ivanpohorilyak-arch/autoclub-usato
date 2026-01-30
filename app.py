@@ -195,11 +195,14 @@ else:
                 if check.data:
                     st.error("❌ Vettura già presente!"); st.stop()
 
+                # PATCH DEFINITIVA: Formato data pulito senza millesimi e fuso orario
+                data_pulita = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
                 data = {
                     "targa": targa, "marca_modello": f"{m_sel.strip()} {mod_sel.strip()}",
                     "colore": colore.strip().capitalize(), "km": int(km), "numero_chiave": int(n_chiave),
                     "zona_id": st.session_state["zona_id"], "zona_attuale": st.session_state["zona_nome"],
-                    "data_ingresso": datetime.now().isoformat(),
+                    "data_ingresso": data_pulita,
                     "note": note, "stato": "PRESENTE", "utente_ultimo_invio": utente_attivo
                 }
                 supabase.table("parco_usato").insert(data).execute()
@@ -251,7 +254,6 @@ else:
     elif scelta == "✏️ Modifica":
         aggiorna_attivita()
         st.subheader("Correzione Dati")
-        # Ricerca per Targa o Numero Chiave
         tipo_m = st.radio("Cerca per:", ["Targa", "Numero Chiave"], horizontal=True, key="m_search_type")
         q_mod = st.text_input("Inserisci valore da cercare").strip().upper()
         
