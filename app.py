@@ -11,6 +11,8 @@ import numpy as np
 from streamlit_autorefresh import st_autorefresh
 import qrcode
 from PIL import Image
+st.cache_data.clear()
+st.cache_resource.clear()
 
 # --- 1. CONFIGURAZIONE DATABASE ---
 supabase = create_client(
