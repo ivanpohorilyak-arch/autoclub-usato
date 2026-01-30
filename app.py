@@ -373,8 +373,29 @@ else:
 
     elif scelta == "📜 Log":
         st_autorefresh(interval=10000, key="log_ref")
-        logs = supabase.table("log_movimenti").select("*").order("created_at", desc=True).limit(50).execute()
-        if logs.data: st.dataframe(pd.DataFrame(logs.data)[["created_at", "targa", "azione", "utente"]], use_container_width=True)
+
+        logs = (
+            supabase
+            .table("log_movimenti")
+            .select("*")
+            .order("created_at", desc=True)
+            .limit(50)
+            .execute()
+        )
+
+        if logs.data:
+            df = pd.DataFrame(logs.data)
+
+            # 🔧 FORMAT DATA SENZA MILLESIMI E FUSO ORARIO
+            df["Data/Ora"] = (
+                pd.to_datetime(df["created_at"], errors="coerce")
+                .dt.strftime("%d/%m/%Y %H:%M:%S")
+            )
+
+            st.dataframe(
+                df[["Data/Ora", "targa", "azione", "utente"]],
+                use_container_width=True
+            )
 
     elif scelta == "🖨️ Stampa QR":
         z_pr = st.selectbox("Zona QR", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}")
