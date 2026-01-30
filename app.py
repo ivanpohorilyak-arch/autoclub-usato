@@ -46,6 +46,8 @@ if 'zona_id_sposta' not in st.session_state: st.session_state['zona_id_sposta'] 
 if 'zona_nome_sposta' not in st.session_state: st.session_state['zona_nome_sposta'] = ""
 if 'camera_attiva' not in st.session_state:
     st.session_state['camera_attiva'] = False
+if "ingresso_salvato" not in st.session_state:
+    st.session_state["ingresso_salvato"] = False
 
 def aggiorna_attivita():
     st.session_state['last_action'] = datetime.now()
@@ -210,6 +212,7 @@ else:
                     st.warning("❌ Targa non valida"); st.stop()
                 check = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute()
                 if check.data: st.error("❌ Vettura già presente!"); st.stop()
+                
                 data_pulita = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
                 data = {
                     "targa": targa, "marca_modello": f"{m_sel.strip()} {mod_sel.strip()}",
@@ -219,15 +222,20 @@ else:
                 }
                 supabase.table("parco_usato").insert(data).execute()
                 registra_log(targa, "Ingresso", f"In {st.session_state['zona_nome']}", utente_attivo)
+                st.session_state["ingresso_salvato"] = True
+                
                 st.success("✅ Vettura registrata correttamente")
                 st.markdown(f"""<div style="background-color:#0f172a; border-left:6px solid #22c55e; padding:16px; border-radius:8px; color:#e5e7eb; font-size:16px; margin-top:10px;">🚗 <b>{targa}</b><br>🏷️ <b>{m_sel} {mod_sel}</b><br>🎨 Colore: <b>{colore}</b><br>🔑 Chiave: <b>{n_chiave}</b><br>📍 Zona: <b>{st.session_state["zona_nome"]}</b><br>👤 Operatore: <b>{utente_attivo}</b></div>""", unsafe_allow_html=True)
                 st.components.v1.html("<script>if (navigator.vibrate) { navigator.vibrate([120, 60, 120]); }</script>", height=0)
 
-        if st.session_state.get("ing_targa"):
-             if st.button("➕ NUOVO INSERIMENTO", use_container_width=True):
+        if st.session_state.get("ingresso_salvato"):
+            st.markdown("---")
+            if st.button("➕ NUOVO INGRESSO", use_container_width=True):
                 for k in ["ing_targa", "ing_km", "ing_chiave", "ing_note"]:
                     if k in st.session_state: del st.session_state[k]
                 st.session_state["zona_id"] = ""; st.session_state["zona_nome"] = ""
+                st.session_state["ingresso_salvato"] = False
+                st.components.v1.html("<script>if (navigator.vibrate) navigator.vibrate([60]);</script>", height=0)
                 st.rerun()
 
     # --- 9. SEZIONE RICERCA / SPOSTA ---
@@ -268,7 +276,7 @@ else:
                                 registra_log(v['targa'], "Consegna", f"Uscita da {v['zona_attuale']}", utente_attivo)
                                 st.success("✅ CONSEGNA REGISTRATA"); time.sleep(1); st.rerun()
 
-    # --- 10. MODIFICA ---
+    # --- SEZIONI RESTANTI INVARIATE ---
     elif scelta == "✏️ Modifica":
         aggiorna_attivita()
         st.subheader("Correzione Dati")
@@ -289,7 +297,6 @@ else:
                         registra_log(v['targa'], "Modifica", "Correzione", utente_attivo)
                         st.success("✅ Salvato!"); time.sleep(1); st.rerun()
 
-    # --- 11. DASHBOARD GENERALE ---
     elif scelta == "📊 Dashboard Generale":
         st.subheader("📊 Dashboard Generale Piazzale")
         presenti_res = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE").execute()
@@ -321,7 +328,6 @@ else:
             df_log = pd.DataFrame(logs); df_log["Ora"] = pd.to_datetime(df_log["created_at"]).dt.strftime("%H:%M")
             st.dataframe(df_log[["Ora", "targa", "azione", "utente"]], use_container_width=True)
 
-    # --- 12. EXPORT ---
     elif scelta == "📊 Export":
         st.subheader("📊 Export Piazzale")
         z_exp = st.selectbox("Zona", ["TUTTE"] + list(ZONE_INFO.keys()))
@@ -342,7 +348,6 @@ else:
                 st.download_button("📥 Scarica Excel", out.getvalue(), f"Piazzale_{z_exp}.xlsx")
         except Exception as e: st.error(f"❌ Errore: {e}")
 
-    # --- 13. VERIFICA ZONE ---
     elif scelta == "📋 Verifica Zone":
         st.subheader("📋 Analisi Piazzale")
         z_id_v = st.selectbox("Zona da analizzare", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}")
@@ -354,7 +359,6 @@ else:
             df_zona = pd.DataFrame(res.data)
             st.dataframe(df_zona[["targa", "marca_modello", "colore", "numero_chiave"]], use_container_width=True)
 
-    # --- 14. DASHBOARD ZONE ---
     elif scelta == "📊 Dashboard Zone":
         st.subheader("📍 Storico Movimenti Zona")
         z_sel = st.selectbox("Seleziona Zona", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}")
@@ -365,7 +369,6 @@ else:
             df["Data/Ora"] = pd.to_datetime(df["created_at"], errors="coerce").dt.strftime("%d/%m/%Y %H:%M:%S")
             st.dataframe(df[["Data/Ora", "targa", "azione", "utente", "numero_chiave"]], use_container_width=True)
 
-    # --- 15. LOG ---
     elif scelta == "📜 Log":
         st_autorefresh(interval=10000, key="log_ref")
         operatori = ["TUTTI"] + sorted(list(CREDENZIALI.keys()))
