@@ -143,7 +143,7 @@ controllo_timeout()
 
 # --- 6. LOGIN ---
 if st.session_state['user_autenticato'] is None:
-    st.title("🔐 Accesso Autoclub Center Usato 1.1")
+    st.title("🔐 Accesso Autoclub Center Usato 1.1 Master")
     u = st.selectbox("Operatore", ["- Seleziona -"] + list(CREDENZIALI.keys()))
     p = st.text_input("PIN", type="password")
     if st.button("ACCEDI"):
@@ -236,53 +236,77 @@ else:
                     if k in st.session_state: del st.session_state[k]
                 st.session_state["zona_id"] = ""; st.session_state["zona_nome"] = ""
                 st.session_state["ingresso_salvato"] = False
-                st.components.v1.html("<script>if (navigator.vibrate) navigator.vibrate([60]);</script>", height=0)
                 st.rerun()
 
     # --- 9. SEZIONE RICERCA / SPOSTA ---
     elif scelta == "🔍 Ricerca/Sposta":
         aggiorna_attivita()
         st.subheader("Ricerca e Spostamento")
-        st.info("📷 **Per effettuare uno spostamento è obbligatorio scansiona il QR della ZONA DI DESTINAZIONE**")
-        st.warning("⚠️ Senza scansione QR **NON è possibile spostare la vettura**")
         
-        if st.session_state.camera_attiva:
-            foto_sp = st.camera_input("Scansiona QR della Zona di DESTINAZIONE", key="cam_sp")
-            if foto_sp:
-                z_id_sp = leggi_qr_zona(foto_sp)
-                if z_id_sp:
-                    st.session_state["zona_id_sposta"] = z_id_sp
-                    st.session_state["zona_nome_sposta"] = ZONE_INFO[z_id_sp]
-                    st.info(f"✅ Destinazione: {st.session_state['zona_nome_sposta']}")
-        
+        # 🟢 RICERCA: SEMPRE ABILITATA
         tipo = st.radio("Cerca per:", ["Targa", "Numero Chiave"], horizontal=True)
         q = st.text_input("Dato da cercare").strip().upper()
+        
         if q:
             col = "targa" if tipo == "Targa" else "numero_chiave"
             val = q if tipo == "Targa" else int(q) if q.isdigit() else None
+            
             if val is not None:
                 res = supabase.table("parco_usato").select("*").eq(col, val).eq("stato", "PRESENTE").execute()
-                if not feedback_ricerca(tipo, q, res.data): st.stop()
+                
+                # Feedback ricerca immediato (senza obbligo QR)
+                if not feedback_ricerca(tipo, q, res.data): 
+                    st.stop()
+                
                 for v in res.data:
                     with st.expander(f"🚗 {v['targa']} - {v['marca_modello']}", expanded=True):
                         st.write(f"📍 Posizione attuale: **{v['zona_attuale']}**")
+                        st.markdown("---")
+                        
+                        # 🔴 SPOSTAMENTO: OBBLIGO SCANSIONE QR
+                        st.markdown("#### 🔄 Azione Spostamento")
+                        
+                        if st.session_state.camera_attiva:
+                            foto_sp = st.camera_input(f"Scansiona QR Destinazione per {v['targa']}", key=f"cam_{v['targa']}")
+                            if foto_sp:
+                                z_id_sp = leggi_qr_zona(foto_sp)
+                                if z_id_sp:
+                                    st.session_state["zona_id_sposta"] = z_id_sp
+                                    st.session_state["zona_nome_sposta"] = ZONE_INFO[z_id_sp]
+                                    st.success(f"📍 Destinazione rilevata: **{st.session_state['zona_nome_sposta']}**")
+                                else:
+                                    st.error("❌ QR Zona non valido")
+                        else:
+                            st.warning("📷 Attiva lo scanner nella Sidebar per abilitare lo spostamento")
+
                         if not st.session_state['zona_id_sposta']:
-                            st.caption("📷 Scansiona prima il **QR della zona di destinazione** per abilitare lo spostamento")
+                            st.caption("ℹ️ Per spostare questa vettura, scansiona il **QR della zona di arrivo**.")
                         
                         c1, c2 = st.columns(2)
-                        if c1.button("SPOSTA QUI", key=f"b_{v['targa']}", disabled=not st.session_state['zona_id_sposta']):
-                            supabase.table("parco_usato").update({"zona_id": st.session_state["zona_id_sposta"], "zona_attuale": st.session_state["zona_nome_sposta"]}).eq("targa", v['targa']).execute()
+                        
+                        # Pulsante SPOSTA (Abilitato solo se QR rilevato)
+                        if c1.button("SPOSTA QUI", key=f"b_{v['targa']}", disabled=not st.session_state['zona_id_sposta'], use_container_width=True):
+                            supabase.table("parco_usato").update({
+                                "zona_id": st.session_state["zona_id_sposta"], 
+                                "zona_attuale": st.session_state["zona_nome_sposta"]
+                            }).eq("targa", v['targa']).execute()
+                            
                             registra_log(v['targa'], "Spostamento", f"In {st.session_state['zona_nome_sposta']}", utente_attivo)
-                            st.session_state["zona_id_sposta"] = ""; st.session_state["zona_nome_sposta"] = ""
-                            st.success("✅ Spostata!"); time.sleep(1); st.rerun()
+                            st.session_state["zona_id_sposta"] = ""
+                            st.session_state["zona_nome_sposta"] = ""
+                            st.success("✅ Vettura Spostata!")
+                            time.sleep(1); st.rerun()
+                        
+                        # Pulsante CONSEGNA (Sempre abilitato per chiudere la pratica)
                         with c2:
                             conf_key = f"conf_{v['targa']}"
                             if conf_key not in st.session_state: st.session_state[conf_key] = False
-                            st.checkbox("⚠️ Confermo CONSEGNA", key=conf_key)
-                            if st.button("🔴 CONSEGNA", key=f"btn_{v['targa']}", disabled=not st.session_state[conf_key]):
+                            st.checkbox("⚠️ Confermo CONSEGNA DEFINITIVA", key=conf_key)
+                            if st.button("🔴 CONSEGNA", key=f"btn_{v['targa']}", disabled=not st.session_state[conf_key], use_container_width=True):
                                 supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute()
                                 registra_log(v['targa'], "Consegna", f"Uscita da {v['zona_attuale']}", utente_attivo)
-                                st.success("✅ CONSEGNA REGISTRATA"); time.sleep(1); st.rerun()
+                                st.success("✅ CONSEGNA REGISTRATA")
+                                time.sleep(1); st.rerun()
 
     # --- SEZIONI RESTANTI INVARIATE ---
     elif scelta == "✏️ Modifica":
