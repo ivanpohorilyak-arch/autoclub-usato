@@ -205,6 +205,7 @@ else:
             if colore == "Nuovo...": colore = st.text_input("Specifica Colore")
             km = st.number_input("Chilometri", min_value=0, step=100, key="ing_km")
             n_chiave = st.number_input("N. Chiave", min_value=0, step=1, key="ing_chiave")
+            st.caption("ℹ️ **Chiave = 0** → vettura **destinata ai commercianti** (nessuna chiave fisica)")
             note = st.text_area("Note", key="ing_note")
 
             if st.form_submit_button("REGISTRA LA VETTURA", disabled=not st.session_state['zona_id']):
@@ -242,6 +243,9 @@ else:
     elif scelta == "🔍 Ricerca/Sposta":
         aggiorna_attivita()
         st.subheader("Ricerca e Spostamento")
+        st.info("📷 **Per effettuare uno spostamento è obbligatorio scansiona il QR della ZONA DI DESTINAZIONE**")
+        st.warning("⚠️ Senza scansione QR **NON è possibile spostare la vettura**")
+        
         if st.session_state.camera_attiva:
             foto_sp = st.camera_input("Scansiona QR della Zona di DESTINAZIONE", key="cam_sp")
             if foto_sp:
@@ -250,6 +254,7 @@ else:
                     st.session_state["zona_id_sposta"] = z_id_sp
                     st.session_state["zona_nome_sposta"] = ZONE_INFO[z_id_sp]
                     st.info(f"✅ Destinazione: {st.session_state['zona_nome_sposta']}")
+        
         tipo = st.radio("Cerca per:", ["Targa", "Numero Chiave"], horizontal=True)
         q = st.text_input("Dato da cercare").strip().upper()
         if q:
@@ -261,6 +266,9 @@ else:
                 for v in res.data:
                     with st.expander(f"🚗 {v['targa']} - {v['marca_modello']}", expanded=True):
                         st.write(f"📍 Posizione attuale: **{v['zona_attuale']}**")
+                        if not st.session_state['zona_id_sposta']:
+                            st.caption("📷 Scansiona prima il **QR della zona di destinazione** per abilitare lo spostamento")
+                        
                         c1, c2 = st.columns(2)
                         if c1.button("SPOSTA QUI", key=f"b_{v['targa']}", disabled=not st.session_state['zona_id_sposta']):
                             supabase.table("parco_usato").update({"zona_id": st.session_state["zona_id_sposta"], "zona_attuale": st.session_state["zona_nome_sposta"]}).eq("targa", v['targa']).execute()
