@@ -146,11 +146,13 @@ else:
     st.markdown("---")
     aggiorna_presenza(utente_attivo, scelta)
 
-    with st.sidebar:
+with st.sidebar:
     st.info(f"👤 {utente_attivo}")
     st.markdown("### 👥 Operatori attivi")
- st_autorefresh(interval=30000, key="presence_heartbeat")
+
+    st_autorefresh(interval=30000, key="presence_heartbeat")
     aggiorna_presenza(utente_attivo, scelta)
+
     attivi = get_operatori_attivi(minuti=15)
     if attivi:
         for o in attivi:
