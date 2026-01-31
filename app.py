@@ -147,7 +147,10 @@ else:
     aggiorna_presenza(utente_attivo, scelta)
 
 with st.sidebar:
-    st.info(f"👤 {utente_attivo}")
+    if st.session_state.get("user_autenticato"):
+        st.info(f"👤 {st.session_state['user_autenticato']}")
+    else:
+        st.info("🔐 Non autenticato")
     st.markdown("### 👥 Operatori attivi")
 
     st_autorefresh(interval=30000, key="presence_heartbeat")
