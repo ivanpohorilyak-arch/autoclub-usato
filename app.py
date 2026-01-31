@@ -32,6 +32,7 @@ CREDENZIALI = {
     "Andrea Sachetti": "2345", 
     "Roberto Gozzi": "3412" 
 }
+TIMEOUT_MINUTI = 20
 
 # --- 3. CONFIGURAZIONE ZONE ---
 ZONE_INFO = {
