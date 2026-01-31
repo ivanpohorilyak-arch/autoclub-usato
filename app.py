@@ -76,7 +76,6 @@ def feedback_ricerca(tipo, valore, risultati):
         time.sleep(0.3)
     if not risultati:
         st.error(f"❌ Nessun risultato trovato per {tipo}: {valore}")
-        st.components.v1.html("<script>if (navigator.vibrate) navigator.vibrate([80,40,80]);</script>", height=0)
         return False
     st.success(f"✅ {len(risultati)} risultato/i trovato/i per {tipo}: {valore}")
     return True
@@ -129,7 +128,7 @@ def leggi_qr_zona(image_file):
 
 controllo_timeout()
 
-# --- 6. LOGIN ---
+# --- 6. LOGIN & MENU PRINCIPALE ---
 if st.session_state['user_autenticato'] is None:
     st.title("🔐 Accesso Autoclub Center Usato 1.1 Master")
     u = st.selectbox("Operatore", ["- Seleziona -"] + list(CREDENZIALI.keys()))
@@ -137,21 +136,26 @@ if st.session_state['user_autenticato'] is None:
     if st.button("ACCEDI", use_container_width=True):
         if u != "- Seleziona -" and p == CREDENZIALI.get(u):
             st.session_state['user_autenticato'] = u
-            aggiorna_attivita(); st.rerun()
+            aggiorna_attivita()
+            st.rerun()
         else: st.error("Accesso negato")
 else:
     utente_attivo = st.session_state['user_autenticato']
-    menu = ["➕ Ingresso", "🔍 Ricerca/Sposta", "✏️ Modifica", "📋 Verifica Zone", "📊 Dashboard Zone", "📊 Dashboard Generale", "📊 Export", "📜 Log", "🖨️ Stampa QR", "♻️ Ripristina"]
+    menu = ["➕ Ingresso", "🔍 Ricerca/Sposta", "✏️ Modifica", 
+            "📋 Verifica Zone", "📊 Dashboard Zone", "📊 Dashboard Generale", 
+            "📊 Export", "📜 Log", "🖨️ Stampa QR", "♻️ Ripristina"]
+    
     scelta = st.radio("Seleziona Funzione", menu, horizontal=True)
-st.session_state["pagina_attuale"] = scelta
-st.markdown("---")
+    st.session_state["pagina_attuale"] = scelta
+    st.markdown("---")
 
-with st.sidebar:
-    if st.session_state.get("user_autenticato"):
-        utente_attivo = st.session_state["user_autenticato"]
+    # --- 7. SIDEBAR ---
+    with st.sidebar:
         st.info(f"👤 {utente_attivo}")
         st_autorefresh(interval=30000, key="presence_heartbeat")
-        aggiorna_presenza(utente_attivo, st.session_state.get("pagina_attuale", ""))
+        aggiorna_presenza(utente_attivo, st.session_state["pagina_attuale"])
+        
+        st.markdown("### 👥 Operatori attivi")
         attivi = get_operatori_attivi(minuti=15)
         if attivi:
             for o in attivi:
@@ -159,15 +163,14 @@ with st.sidebar:
                 st.caption(f"{stato} **{o['utente']}**\n_{o.get('pagina','')}_")
         else:
             st.caption("Nessun altro operatore collegato")
+        
         st.markdown("---")
         st.markdown("### 📷 Scanner QR")
         st.checkbox("Attiva scanner", key="camera_attiva")
         if st.button("Log-out"):
             st.session_state.clear()
             st.rerun()
-    else:
-        st.info("🔐 Non autenticato")
-        
+
     # --- 8. SEZIONE INGRESSO ---
     if scelta == "➕ Ingresso":
         aggiorna_attivita()
@@ -293,7 +296,7 @@ with st.sidebar:
                         registra_log(v['targa'], "Modifica", "Correzione manuale", utente_attivo)
                         st.success("✅ Dati aggiornati"); time.sleep(1); st.rerun()
 
-    # --- 11. DASHBOARD GENERALE (CON FIX UTC) ---
+    # --- 11. DASHBOARD GENERALE ---
     elif scelta == "📊 Dashboard Generale":
         st.subheader("📊 Dashboard Generale Piazzale")
         res_p = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE").execute()
@@ -321,7 +324,7 @@ with st.sidebar:
             df_l["Ora"] = pd.to_datetime(df_l["created_at"], utc=True).dt.tz_convert("Europe/Rome").dt.strftime("%H:%M")
             st.dataframe(df_l[["Ora", "targa", "azione", "utente", "dettaglio"]], use_container_width=True)
 
-    # --- 12. SEZIONE EXPORT (VERSIONE MASTER 1.1) ---
+    # --- 12. SEZIONE EXPORT ---
     elif scelta == "📊 Export":
         st.subheader("📊 Export Piazzale")
         z_exp = st.selectbox("Seleziona Zona", ["TUTTE"] + list(ZONE_INFO.keys()), 
@@ -353,7 +356,7 @@ with st.sidebar:
             st.dataframe(pd.DataFrame(res.data)[["targa", "marca_modello", "colore", "numero_chiave", "note"]], use_container_width=True)
         else: st.warning("Zona vuota")
 
-    # --- 14. LOG (VERSIONE MASTER 1.1) ---
+    # --- 14. LOG ---
     elif scelta == "📜 Log":
         st_autorefresh(interval=30000, key="log_auto")
         st.subheader("📜 Registro Movimenti")
@@ -385,7 +388,7 @@ with st.sidebar:
                     registra_log(t_r, "Ripristino", "Riportata in stock", utente_attivo)
                     st.success("✅ Vettura ripristinata"); time.sleep(1); st.rerun()
 
-    # --- 17. DASHBOARD ZONE (STORICO) ---
+    # --- 17. DASHBOARD ZONE ---
     elif scelta == "📊 Dashboard Zone":
         st.subheader("📍 Storico Movimenti Zona")
         z_sel = st.selectbox("Filtra per Zona", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}")
