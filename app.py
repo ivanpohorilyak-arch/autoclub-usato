@@ -147,15 +147,18 @@ else:
     aggiorna_presenza(utente_attivo, scelta)
 
     with st.sidebar:
-        st.info(f"👤 {utente_attivo}")
-        st.markdown("### 👥 Operatori attivi")
-        attivi = get_operatori_attivi(minuti=10)
-        if attivi:
-            for o in attivi:
-                stato = "🟢" if o["utente"] != utente_attivo else "🟡"
-                pagina = o.get("pagina", "")
-                st.caption(f"{stato} **{o['utente']}** \n_{pagina}_")
-        else: st.caption("Nessun altro operatore collegato")
+    st.info(f"👤 {utente_attivo}")
+    st.markdown("### 👥 Operatori attivi")
+ st_autorefresh(interval=30000, key="presence_heartbeat")
+    aggiorna_presenza(utente_attivo, scelta)
+    attivi = get_operatori_attivi(minuti=15)
+    if attivi:
+        for o in attivi:
+            stato = "🟡" if o["utente"] == utente_attivo else "🟢"
+            pagina = o.get("pagina", "")
+            st.caption(f"{stato} **{o['utente']}**\n_{pagina}_")
+    else:
+        st.caption("Nessun altro operatore collegato")
         st.sidebar.markdown("---")
         st.sidebar.markdown("### 📷 Scanner QR")
         st.checkbox("Attiva scanner", key="camera_attiva")
