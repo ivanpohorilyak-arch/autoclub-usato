@@ -8,9 +8,10 @@ from io import BytesIO
 import re
 import cv2
 import numpy as np
-from streamlit_autorefresh import st_autorefresh
+from qrcode import make as make_qr
 import qrcode
 from PIL import Image
+from streamlit_autorefresh import st_autorefresh
 
 # Pulizia cache all'avvio
 st.cache_data.clear()
@@ -314,15 +315,56 @@ else:
         c2.metric("⏱️ Media Giorni", media)
         c3.metric("⚠️ Critiche (+30gg)", len([g for g in giorni if g >= 30]))
         c4.metric("📍 Zone Occupate", len({v["zona_id"] for v in presenti}))
-        
+
+        # --- KPI OPERATORE (OGGI) ---
         st.markdown("---")
-        st.subheader("🕒 Attività Recenti (Oggi)")
-        oggi = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0)
-        res_l = supabase.table("log_movimenti").select("*").gte("created_at", oggi.isoformat()).order("created_at", desc=True).execute()
-        if res_l.data:
-            df_l = pd.DataFrame(res_l.data)
-            df_l["Ora"] = pd.to_datetime(df_l["created_at"], utc=True).dt.tz_convert("Europe/Rome").dt.strftime("%H:%M")
-            st.dataframe(df_l[["Ora", "targa", "azione", "utente", "dettaglio"]], use_container_width=True)
+        st.markdown("### 👤 KPI Operatore (Oggi)")
+        inizio_oggi = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0)
+
+        res_user = supabase.table("log_movimenti") \
+            .select("azione") \
+            .eq("utente", utente_attivo) \
+            .gte("created_at", inizio_oggi.isoformat()) \
+            .execute()
+
+        azioni = [r["azione"] for r in res_user.data] if res_user.data else []
+
+        k1, k2, k3 = st.columns(3)
+        k1.metric("➕ Ingressi", azioni.count("Ingresso"))
+        k2.metric("🔄 Spostamenti", azioni.count("Spostamento"))
+        k3.metric("🔴 Consegne", azioni.count("Consegna"))
+
+        # --- ATTIVITÀ DI OGGI (PER UTENTE) ---
+        st.markdown("### 🕒 Le tue attività di oggi")
+        res_log_user = supabase.table("log_movimenti") \
+            .select("*") \
+            .eq("utente", utente_attivo) \
+            .gte("created_at", inizio_oggi.isoformat()) \
+            .order("created_at", desc=True) \
+            .execute()
+
+        if res_log_user.data:
+            df_u = pd.DataFrame(res_log_user.data)
+            df_u["Ora"] = pd.to_datetime(df_u["created_at"], utc=True) \
+                            .dt.tz_convert("Europe/Rome") \
+                            .dt.strftime("%H:%M")
+            st.dataframe(df_u[["Ora", "targa", "azione", "dettaglio"]], use_container_width=True)
+        else:
+            st.info("Nessuna attività registrata oggi")
+
+        # --- KPI GLOBALI OGGI ---
+        st.markdown("### 🏭 KPI Piazzale (Oggi)")
+        res_all = supabase.table("log_movimenti") \
+            .select("azione") \
+            .gte("created_at", inizio_oggi.isoformat()) \
+            .execute()
+
+        azioni_all = [r["azione"] for r in res_all.data] if res_all.data else []
+
+        g1, g2, g3 = st.columns(3)
+        g1.metric("➕ Ingressi Totali", azioni_all.count("Ingresso"))
+        g2.metric("🔄 Spostamenti Totali", azioni_all.count("Spostamento"))
+        g3.metric("🔴 Consegne Totali", azioni_all.count("Consegna"))
 
     # --- 12. SEZIONE EXPORT AGGIORNATA ---
     elif scelta == "📊 Export":
@@ -376,9 +418,9 @@ else:
     elif scelta == "🖨️ Stampa QR":
         st.subheader("🖨️ Generatore QR Zone")
         z_qr = st.selectbox("Zona da stampare", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}")
-        qr = qrcode.make(f"ZONA|{z_qr}")
+        qr_obj = qrcode.make(f"ZONA|{z_qr}")
         buf = BytesIO()
-        qr.save(buf, format="PNG")
+        qr_obj.save(buf, format="PNG")
         st.image(buf.getvalue(), width=250)
         st.download_button("DOWNLOAD QR", buf.getvalue(), f"QR_{z_qr}.png")
 
