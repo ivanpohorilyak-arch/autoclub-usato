@@ -143,32 +143,31 @@ else:
     utente_attivo = st.session_state['user_autenticato']
     menu = ["➕ Ingresso", "🔍 Ricerca/Sposta", "✏️ Modifica", "📋 Verifica Zone", "📊 Dashboard Zone", "📊 Dashboard Generale", "📊 Export", "📜 Log", "🖨️ Stampa QR", "♻️ Ripristina"]
     scelta = st.radio("Seleziona Funzione", menu, horizontal=True)
-    st.markdown("---")
-    aggiorna_presenza(utente_attivo, scelta)
+st.session_state["pagina_attuale"] = scelta
+st.markdown("---")
 
 with st.sidebar:
     if st.session_state.get("user_autenticato"):
-        st.info(f"👤 {st.session_state['user_autenticato']}")
+        utente_attivo = st.session_state["user_autenticato"]
+        st.info(f"👤 {utente_attivo}")
+        st_autorefresh(interval=30000, key="presence_heartbeat")
+        aggiorna_presenza(utente_attivo, st.session_state.get("pagina_attuale", ""))
+        attivi = get_operatori_attivi(minuti=15)
+        if attivi:
+            for o in attivi:
+                stato = "🟡" if o["utente"] == utente_attivo else "🟢"
+                st.caption(f"{stato} **{o['utente']}**\n_{o.get('pagina','')}_")
+        else:
+            st.caption("Nessun altro operatore collegato")
+        st.markdown("---")
+        st.markdown("### 📷 Scanner QR")
+        st.checkbox("Attiva scanner", key="camera_attiva")
+        if st.button("Log-out"):
+            st.session_state.clear()
+            st.rerun()
     else:
         st.info("🔐 Non autenticato")
-    st.markdown("### 👥 Operatori attivi")
-
-    st_autorefresh(interval=30000, key="presence_heartbeat")
-    aggiorna_presenza(utente_attivo, scelta)
-
-    attivi = get_operatori_attivi(minuti=15)
-    if attivi:
-        for o in attivi:
-            stato = "🟡" if o["utente"] == utente_attivo else "🟢"
-            pagina = o.get("pagina", "")
-            st.caption(f"{stato} **{o['utente']}**\n_{pagina}_")
-    else:
-        st.caption("Nessun altro operatore collegato")
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("### 📷 Scanner QR")
-        st.checkbox("Attiva scanner", key="camera_attiva")
-        if st.button("Log-out"): st.session_state.clear(); st.rerun()
-
+        
     # --- 8. SEZIONE INGRESSO ---
     if scelta == "➕ Ingresso":
         aggiorna_attivita()
