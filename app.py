@@ -23,7 +23,7 @@ supabase = create_client(
     os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 )
 
-# --- 2. CREDENZIALI & TIMEOUT ---
+# --- 2. CREDENZIALI ---
 CREDENZIALI = {
     "Luca Simonini": "2026", 
     "Ivan Pohorilyak": "1234", 
@@ -32,7 +32,6 @@ CREDENZIALI = {
     "Andrea Sachetti": "2345", 
     "Roberto Gozzi": "3412" 
 }
-TIMEOUT_MINUTI = 10
 
 # --- 3. CONFIGURAZIONE ZONE ---
 ZONE_INFO = {
