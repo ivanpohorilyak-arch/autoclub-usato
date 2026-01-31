@@ -358,25 +358,72 @@ else:
             df_log = pd.DataFrame(logs); df_log["Ora"] = pd.to_datetime(df_log["created_at"]).dt.strftime("%H:%M")
             st.dataframe(df_log[["Ora", "targa", "azione", "utente"]], use_container_width=True)
 
+    # --- 9. SEZIONE EXPORT AGGIORNATA ---
     elif scelta == "📊 Export":
         st.subheader("📊 Export Piazzale")
-        z_exp = st.selectbox("Zona", ["TUTTE"] + list(ZONE_INFO.keys()))
+        
+        # Miglioramento 1: Selectbox parlante (ID + Nome)
+        z_exp = st.selectbox(
+            "Seleziona Zona da esportare", 
+            ["TUTTE"] + list(ZONE_INFO.keys()),
+            format_func=lambda z: "TUTTE le zone" if z == "TUTTE" else f"{z} - {ZONE_INFO[z]}"
+        )
+        
         try:
             q = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE")
-            if z_exp != "TUTTE": q = q.eq("zona_id", z_exp)
+            if z_exp != "TUTTE": 
+                q = q.eq("zona_id", z_exp)
+            
             res = q.execute()
+            
             if res.data:
                 df = pd.DataFrame(res.data)
+                
+                # Miglioramento 2: Creazione colonna combinata Zona per Excel
+                # Gestiamo eventuali valori nulli per sicurezza
+                df["Zona"] = df.apply(lambda x: f"{x.get('zona_id', '')} - {x.get('zona_attuale', '')}", axis=1)
+                
                 if "data_ingresso" in df.columns:
                     df["data_ingresso"] = pd.to_datetime(df["data_ingresso"], errors="coerce")
                     df["Data Inserimento"] = df["data_ingresso"].dt.strftime("%d/%m/%Y %H:%M")
-                else: df["Data Inserimento"] = "N/D"
-                cols = ["targa", "marca_modello", "colore", "km", "numero_chiave", "zona_attuale", "Data Inserimento", "note"]
-                df_out = df[cols].copy(); st.dataframe(df_out, use_container_width=True)
+                else: 
+                    df["Data Inserimento"] = "N/D"
+                
+                # Miglioramento 3: Utilizzo della nuova colonna 'Zona' nell'export
+                cols = [
+                    "targa", 
+                    "marca_modello", 
+                    "colore", 
+                    "km", 
+                    "numero_chiave", 
+                    "Zona", 
+                    "Data Inserimento", 
+                    "note"
+                ]
+                
+                df_out = df[cols].copy()
+                
+                # Anteprima a schermo
+                st.write(f"Vetture trovate: **{len(df_out)}**")
+                st.dataframe(df_out, use_container_width=True)
+                
+                # Generazione file Excel
                 out = BytesIO()
-                with pd.ExcelWriter(out, engine="xlsxwriter") as w: df_out.to_excel(w, index=False)
-                st.download_button("📥 Scarica Excel", out.getvalue(), f"Piazzale_{z_exp}.xlsx")
-        except Exception as e: st.error(f"❌ Errore: {e}")
+                with pd.ExcelWriter(out, engine="xlsxwriter") as w: 
+                    df_out.to_excel(w, index=False, sheet_name='Piazzale')
+                
+                st.download_button(
+                    label="📥 Scarica Report Excel",
+                    data=out.getvalue(),
+                    file_name=f"Piazzale_{z_exp}_{datetime.now().strftime('%d_%m_%y')}.xlsx",
+                    mime="application/vnd.ms-excel",
+                    use_container_width=True
+                )
+            else:
+                st.warning("⚠️ Nessun dato trovato per i criteri selezionati.")
+                
+        except Exception as e: 
+            st.error(f"❌ Errore durante l'export: {e}")
 
     elif scelta == "📋 Verifica Zone":
         st.subheader("📋 Analisi Piazzale")
