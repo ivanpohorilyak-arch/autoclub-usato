@@ -130,7 +130,7 @@ controllo_timeout()
 
 # --- 6. LOGIN & MENU PRINCIPALE ---
 if st.session_state['user_autenticato'] is None:
-    st.title("🔐 Accesso Autoclub Center Usato 1.1 Master")
+    st.title("🔐 Accesso Autoclub Center Usato 1.1")
     u = st.selectbox("Operatore", ["- Seleziona -"] + list(CREDENZIALI.keys()))
     p = st.text_input("PIN", type="password")
     if st.button("ACCEDI", use_container_width=True):
@@ -324,7 +324,7 @@ else:
             df_l["Ora"] = pd.to_datetime(df_l["created_at"], utc=True).dt.tz_convert("Europe/Rome").dt.strftime("%H:%M")
             st.dataframe(df_l[["Ora", "targa", "azione", "utente", "dettaglio"]], use_container_width=True)
 
-    # --- 12. SEZIONE EXPORT ---
+    # --- 12. SEZIONE EXPORT AGGIORNATA ---
     elif scelta == "📊 Export":
         st.subheader("📊 Export Piazzale")
         z_exp = st.selectbox("Seleziona Zona", ["TUTTE"] + list(ZONE_INFO.keys()), 
@@ -337,7 +337,13 @@ else:
         if res.data:
             df = pd.DataFrame(res.data)
             df["Zona"] = df.apply(lambda x: f"{x.get('zona_id','')} - {x.get('zona_attuale','')}", axis=1)
-            df["Data Inserimento"] = pd.to_datetime(df["data_ingresso"], utc=True).dt.tz_convert("Europe/Rome").dt.strftime("%d/%m/%Y %H:%M")
+            
+            # Fix conversione date con gestione errori e pulizia NaT
+            df["Data Inserimento"] = (
+                pd.to_datetime(df["data_ingresso"], errors="coerce", utc=True)
+                  .dt.tz_convert("Europe/Rome")
+                  .dt.strftime("%d/%m/%Y %H:%M")
+            ).fillna("—")
             
             cols = ["targa", "marca_modello", "colore", "km", "numero_chiave", "Zona", "Data Inserimento", "note"]
             st.dataframe(df[cols], use_container_width=True)
