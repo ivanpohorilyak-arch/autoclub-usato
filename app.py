@@ -233,12 +233,13 @@ else:
                 st.markdown(f"""<div style="background-color:#0f172a; border-left:6px solid #22c55e; padding:16px; border-radius:8px; color:#e5e7eb; font-size:16px; margin-top:10px;">🚗 <b>{targa}</b><br>🏷️ <b>{marca} {modello}</b><br>🎨 Colore: <b>{colore}</b><br>🔑 Chiave: <b>{n_chiave}</b><br>📍 Zona: <b>{st.session_state["zona_nome"]}</b><br>👤 Operatore: <b>{utente_attivo}</b></div>""", unsafe_allow_html=True)
                 st.components.v1.html("<script>if (navigator.vibrate) { navigator.vibrate([120, 60, 120]); }</script>", height=0)
 
+        # --- FIX PULSANTE NUOVO INGRESSO ---
         if st.session_state.get("ingresso_salvato"):
             st.markdown("---")
             if st.button("➕ NUOVO INGRESSO", use_container_width=True):
                 for k in ["ing_targa", "ing_km", "ing_chiave", "ing_note", "marca_input", "modello_input", "colore_input"]:
-                    if k in st.session_state: del st.session_state[k]
-                st.session_state["zona_id"] = ""; st.session_state["zona_nome"] = ""
+                    if k in st.session_state:
+                        del st.session_state[k]
                 st.session_state["ingresso_salvato"] = False
                 st.rerun()
 
