@@ -172,10 +172,12 @@ else:
             st.session_state.clear()
             st.rerun()
 
-    # --- 8. SEZIONE INGRESSO ---
+        # --- 8. SEZIONE INGRESSO (Aggiornata 1.1 Master) ---
     if scelta == "➕ Ingresso":
         aggiorna_attivita()
         st.subheader("Registrazione Nuova Vettura")
+        
+        # Logica Scanner QR
         if st.session_state.camera_attiva:
             foto_z = st.camera_input("Scansiona QR della Zona", key="cam_in")
             if foto_z:
@@ -187,16 +189,19 @@ else:
                 else: st.error("❌ QR non valido")
         else: st.warning("⚠️ Scanner disattivato dalla Sidebar.")
 
+        # Form di inserimento
         with st.form("f_ingresso"):
-            if not st.session_state['zona_id']: st.error("❌ Scansione QR Obbligatoria per abilitare la registrazione")
-            else: st.info(f"📍 Zona selezionata: **{st.session_state['zona_nome']}**")
+            if not st.session_state['zona_id']: 
+                st.error("❌ Scansione QR Obbligatoria per abilitare la registrazione")
+            else: 
+                st.info(f"📍 Zona selezionata: **{st.session_state['zona_nome']}**")
            
             targa = st.text_input("TARGA", key="ing_targa").upper().strip()
             marca = st.text_input("Marca", key="marca_input").upper().strip()
             modello = st.text_input("Modello", key="modello_input").upper().strip()
             
             c_sug = suggerisci_colore(targa) if targa else None
-            if c_sug: st.info(f"🎨 Suggerito: **{c_sug}**")
+            if c_sug: st.info(f"🎨 Colore suggerito: **{c_sug}**")
             colore = st.text_input("Colore", key="colore_input").capitalize().strip()
 
             km = st.number_input("Chilometri", min_value=0, step=100, key="ing_km")
@@ -204,35 +209,75 @@ else:
             st.caption("ℹ️ Chiave = 0 → vettura destinata ai commercianti")
             note = st.text_area("Note", key="ing_note")
 
-            if st.form_submit_button("REGISTRA LA VETTURA", disabled=not st.session_state['zona_id']):
+            submit = st.form_submit_button("REGISTRA LA VETTURA", disabled=not st.session_state['zona_id'])
+
+            if submit:
+                # Validazioni
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa):
-                    st.warning("❌ Targa non valida"); st.stop()
+                    st.warning("❌ Targa non valida (formato AA123BB richiesto)"); st.stop()
                 if not marca or not modello or not colore:
                     st.error("❌ Marca, Modello e Colore sono obbligatori"); st.stop()
                 
+                # Controllo Duplicati
                 check = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute()
-                if check.data: st.error("❌ Vettura già presente!"); st.stop()
+                if check.data: 
+                    st.error(f"❌ La targa {targa} è già presente in piazzale!"); st.stop()
                 
-                data_utc = datetime.now(timezone.utc).isoformat()
-                data = {
+                # Salvataggio
+                data_ora_attuale = datetime.now(timezone.utc)
+                data_payload = {
                     "targa": targa, "marca_modello": f"{marca} {modello}",
                     "colore": colore, "km": int(km), "numero_chiave": int(n_chiave),
                     "zona_id": st.session_state["zona_id"], "zona_attuale": st.session_state["zona_nome"],
-                    "data_ingresso": data_utc, "note": note, "stato": "PRESENTE", "utente_ultimo_invio": utente_attivo
+                    "data_ingresso": data_ora_attuale.isoformat(), "note": note, 
+                    "stato": "PRESENTE", "utente_ultimo_invio": utente_attivo
                 }
-                supabase.table("parco_usato").insert(data).execute()
+                
+                supabase.table("parco_usato").insert(data_payload).execute()
                 registra_log(targa, "Ingresso", f"In {st.session_state['zona_nome']}", utente_attivo)
-                st.session_state["ingresso_salvato"] = True
-                st.success("✅ Vettura registrata correttamente")
+                
+                # SALVATAGGIO INFORMAZIONI NELLO STATE PER IL FUMETTO
+                st.session_state["ingresso_salvato"] = {
+                    "targa": targa,
+                    "zona": st.session_state["zona_nome"],
+                    "chiave": n_chiave,
+                    "colore": colore,
+                    "utente": utente_attivo,
+                    "ora": data_ora_attuale
+                }
                 st.rerun()
 
-        if st.session_state.get("ingresso_salvato"):
-            if st.button("➕ NUOVO INGRESSO", use_container_width=True):
-                for k in ["ing_targa", "ing_km", "ing_chiave", "ing_note", "marca_input", "modello_input", "colore_input"]:
-                    if k in st.session_state: del st.session_state[k]
-                st.session_state["zona_id"] = ""; st.session_state["zona_nome"] = ""
+        # Visualizzazione Fumetto Riepilogativo
+        info = st.session_state.get("ingresso_salvato")
+        if isinstance(info, dict):
+            # Conversione ora locale per il display
+            ora_loc = info["ora"].astimezone().strftime("%H:%M:%S")
+            
+            st.success(
+                f"### 🚗 Vettura registrata correttamente\n"
+                f"--- \n"
+                f"**Targa:** `{info['targa']}`  \n"
+                f"**Posizione:** {info['zona']}  \n"
+                f"**Chiave:** {info['chiave']}  \n"
+                f"**Colore:** {info['colore']}  \n"
+                f"**Operatore:** {info['utente']}  \n"
+                f"**Ora:** {ora_loc}"
+            )
+            
+            if st.button("➕ REGISTRA UN'ALTRA VETTURA", use_container_width=True):
+                # Reset campi e stato
+                campi_da_resettare = [
+                    "ing_targa", "ing_km", "ing_chiave", "ing_note", 
+                    "marca_input", "modello_input", "colore_input"
+                ]
+                for k in campi_da_resettare:
+                    st.session_state.pop(k, None)
+                
+                st.session_state["zona_id"] = ""
+                st.session_state["zona_nome"] = ""
                 st.session_state["ingresso_salvato"] = False
                 st.rerun()
+
 
     # --- 9. SEZIONE RICERCA / SPOSTA ---
     elif scelta == "🔍 Ricerca/Sposta":
