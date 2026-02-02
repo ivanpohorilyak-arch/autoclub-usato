@@ -66,19 +66,10 @@ def controllo_timeout():
             st.session_state['ruolo'] = None
             st.rerun()
 
-# --- 4. FUNZIONI LOGIN & DATABASE (CORRETTA) ---
+# --- 4. FUNZIONI LOGIN & DATABASE ---
 def login_db(nome, pin):
     try:
-        res = (
-            supabase
-            .table("utenti")
-            .select("nome, ruolo")
-            .eq("nome", nome)
-            .eq("pin", pin)
-            .eq("attivo", True)
-            .limit(1)
-            .execute()
-        )
+        res = supabase.table("utenti").select("nome, ruolo").eq("nome", nome).eq("pin", pin).eq("attivo", True).limit(1).execute()
         return res.data[0] if res.data else None
     except Exception as e:
         st.error(f"Errore login: {e}")
@@ -168,7 +159,6 @@ else:
         st.info(f"👤 {utente_attivo} ({st.session_state['ruolo']})")
         st_autorefresh(interval=30000, key="presence_heartbeat")
         aggiorna_presenza(utente_attivo, st.session_state["pagina_attuale"])
-        
         st.markdown("---")
         st.markdown("### 📷 Scanner QR")
         st.checkbox("Attiva scanner", key="camera_attiva")
@@ -216,14 +206,27 @@ else:
                 }
                 supabase.table("parco_usato").insert(payload).execute()
                 registra_log(targa, "Ingresso", f"In {st.session_state['zona_nome']}", utente_attivo)
-                st.session_state["ingresso_salvato"] = {"targa": targa, "zona": st.session_state["zona_nome"], "ora": datetime.now(timezone.utc)}
+                
+                st.session_state["ingresso_salvato"] = {
+                    "targa": targa, "modello": f"{marca} {modello}", "colore": colore, 
+                    "km": int(km), "chiave": int(n_chiave), "zona": st.session_state["zona_nome"]
+                }
                 st.rerun()
 
         if st.session_state.get("ingresso_salvato"):
             info = st.session_state["ingresso_salvato"]
-            st.success("✅ Registrazione completata")
-            st.info(f"🚗 Targa: {info['targa']} | 📍 Zona: {info['zona']}")
-            if st.button("🆕 NUOVA REGISTRAZIONE"):
+            st.markdown(f"""
+                <div style="background-color:#d4edda; border:1px solid #28a745; padding:16px; border-radius:10px; color:#155724;">
+                    <h4>✅ Vettura registrata correttamente</h4>
+                    <b>🚗 Targa:</b> {info['targa']}<br>
+                    <b>📦 Modello:</b> {info['modello']}<br>
+                    <b>🎨 Colore:</b> {info['colore']}<br>
+                    <b>📏 Chilometri:</b> {info['km']}<br>
+                    <b>🔑 Numero chiave:</b> {info['chiave']}<br>
+                    <b>📍 Zona:</b> {info['zona']}
+                </div>
+                """, unsafe_allow_html=True)
+            if st.button("🆕 NUOVA REGISTRAZIONE", use_container_width=True):
                 st.session_state["ingresso_salvato"] = False
                 st.rerun()
 
@@ -296,19 +299,13 @@ else:
         res_ut = supabase.table("utenti").select("nome").eq("attivo", True).order("nome").execute()
         lista_operatori = ["Tutti"] + [u["nome"] for u in res_ut.data] if res_ut.data else ["Tutti"]
         with c2: operatore_sel = st.selectbox("👤 Operatore", lista_operatori)
-
         now = datetime.now(timezone.utc)
         data_inizio = now.replace(hour=0, minute=0, second=0) if periodo == "Oggi" else now - timedelta(days=7)
         query = supabase.table("log_movimenti").select("*").gte("created_at", data_inizio.isoformat())
         if operatore_sel != "Tutti": query = query.eq("utente", operatore_sel)
         res_log = query.order("created_at", desc=True).execute()
-        log_filtrati = res_log.data or []
-
-        res_p = supabase.table("parco_usato").select("targa").eq("stato", "PRESENTE").execute()
-        st.metric("🚗 In Piazzale", len(res_p.data or []))
-        
-        if log_filtrati:
-            df = pd.DataFrame(log_filtrati)
+        if res_log.data:
+            df = pd.DataFrame(res_log.data)
             df["Ora"] = pd.to_datetime(df["created_at"]).dt.tz_convert("Europe/Rome").dt.strftime("%d/%m %H:%M")
             st.dataframe(df[["Ora", "utente", "targa", "azione", "dettaglio"]], use_container_width=True)
 
@@ -348,8 +345,6 @@ else:
             df["Utente"] = df["utente"].apply(lambda u: u if u in utenti_attuali else f"{u} ⚠️")
             st.caption("⚠️ Utenti con nome modificato o non più presenti sono evidenziati con ⚠️")
             st.dataframe(df[["Ora", "targa", "azione", "Utente", "dettaglio"]], use_container_width=True)
-        else:
-            st.info("Nessun movimento registrato.")
 
     # --- 15. STAMPA QR ---
     elif scelta == "🖨️ Stampa QR":
@@ -381,16 +376,33 @@ else:
         st.subheader("👥 Gestione Utenti (Admin)")
         if st.session_state["ruolo"] != "admin":
             st.error("Accesso non autorizzato"); st.stop()
-        res = supabase.table("utenti").select("*").order("nome").execute()
-        if res.data:
-            df_ut = pd.DataFrame(res.data)
+        
+        res_all = supabase.table("utenti").select("*").order("nome").execute()
+        if res_all.data:
+            df_ut = pd.DataFrame(res_all.data)
             st.dataframe(df_ut[["nome", "ruolo", "attivo"]], use_container_width=True)
 
         with st.form("add_user"):
-            st.write("➕ Aggiungi Utente")
+            st.markdown("### ➕ Aggiungi Utente")
             n = st.text_input("Nome e Cognome")
             p = st.text_input("PIN", type="password")
             r = st.selectbox("Ruolo", ["operatore", "admin"])
             if st.form_submit_button("CREA"):
                 supabase.table("utenti").insert({"nome": n, "pin": p, "ruolo": r, "attivo": True}).execute()
                 st.success("Creato"); time.sleep(1); st.rerun()
+
+        st.markdown("---")
+        st.markdown("### ✏️ Modifica / Disattiva Utente")
+        nomi_utenti = [u["nome"] for u in res_all.data]
+        u_sel = st.selectbox("Seleziona utente", nomi_utenti)
+        ut = next(u for u in res_all.data if u["nome"] == u_sel)
+
+        with st.form("edit_user"):
+            new_pin = st.text_input("Nuovo PIN (lascia vuoto per non cambiare)", type="password")
+            new_ruolo = st.selectbox("Ruolo", ["operatore", "admin"], index=0 if ut["ruolo"] == "operatore" else 1)
+            attivo = st.checkbox("Utente attivo", value=ut["attivo"])
+            if st.form_submit_button("SALVA MODIFICHE"):
+                upd = {"ruolo": new_ruolo, "attivo": attivo}
+                if new_pin: upd["pin"] = new_pin
+                supabase.table("utenti").update(upd).eq("nome", u_sel).execute()
+                st.success("✅ Utente aggiornato"); time.sleep(1); st.rerun()
