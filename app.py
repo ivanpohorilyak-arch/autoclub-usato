@@ -66,12 +66,23 @@ def controllo_timeout():
             st.session_state['ruolo'] = None
             st.rerun()
 
-# --- 4. FUNZIONI LOGIN & DATABASE ---
+# --- 4. FUNZIONI LOGIN & DATABASE (CORRETTA) ---
 def login_db(nome, pin):
     try:
-        res = supabase.table("utenti").select("nome, ruolo").eq("nome", name).eq("pin", pin).eq("attivo", True).limit(1).execute()
+        res = (
+            supabase
+            .table("utenti")
+            .select("nome, ruolo")
+            .eq("nome", nome)
+            .eq("pin", pin)
+            .eq("attivo", True)
+            .limit(1)
+            .execute()
+        )
         return res.data[0] if res.data else None
-    except: return None
+    except Exception as e:
+        st.error(f"Errore login: {e}")
+        return None
 
 def get_lista_utenti_login():
     try:
@@ -287,7 +298,7 @@ else:
         with c2: operatore_sel = st.selectbox("👤 Operatore", lista_operatori)
 
         now = datetime.now(timezone.utc)
-        data_inizio = now.replace(hour=0, minute=0, second=0) if periodo == "Oggi" else now - timedelta(days=7) # Semplificato per spazio
+        data_inizio = now.replace(hour=0, minute=0, second=0) if periodo == "Oggi" else now - timedelta(days=7)
         query = supabase.table("log_movimenti").select("*").gte("created_at", data_inizio.isoformat())
         if operatore_sel != "Tutti": query = query.eq("utente", operatore_sel)
         res_log = query.order("created_at", desc=True).execute()
@@ -325,37 +336,18 @@ else:
         if res.data: st.dataframe(pd.DataFrame(res.data)[["targa", "marca_modello", "colore"]], use_container_width=True)
         else: st.warning("Zona vuota")
 
-    # --- 14. SEZIONE LOG (VERSIONE AGGIORNATA) ---
+    # --- 14. SEZIONE LOG ---
     elif scelta == "📜 Log":
         st.subheader("📜 Registro Movimenti")
-
-        # carico utenti attivi e non per controllo integrità nomi
         res_ut = supabase.table("utenti").select("nome").execute()
         utenti_attuali = {u["nome"] for u in res_ut.data} if res_ut.data else set()
-
         res = supabase.table("log_movimenti").select("*").order("created_at", desc=True).limit(50).execute()
-
         if res.data:
             df = pd.DataFrame(res.data)
-
-            # orario locale
-            df["Ora"] = (
-                pd.to_datetime(df["created_at"])
-                .dt.tz_convert("Europe/Rome")
-                .dt.strftime("%H:%M:%S")
-            )
-
-            # evidenzia utenti non più esistenti / rinominati
-            df["Utente"] = df["utente"].apply(
-                lambda u: u if u in utenti_attuali else f"{u} ⚠️"
-            )
-
+            df["Ora"] = pd.to_datetime(df["created_at"]).dt.tz_convert("Europe/Rome").dt.strftime("%H:%M:%S")
+            df["Utente"] = df["utente"].apply(lambda u: u if u in utenti_attuali else f"{u} ⚠️")
             st.caption("⚠️ Utenti con nome modificato o non più presenti sono evidenziati con ⚠️")
-
-            st.dataframe(
-                df[["Ora", "targa", "azione", "Utente", "dettaglio"]],
-                use_container_width=True
-            )
+            st.dataframe(df[["Ora", "targa", "azione", "Utente", "dettaglio"]], use_container_width=True)
         else:
             st.info("Nessun movimento registrato.")
 
