@@ -50,11 +50,17 @@ if 'camera_attiva' not in st.session_state:
 if "ingresso_salvato" not in st.session_state:
     st.session_state["ingresso_salvato"] = False
 
-# --- GESTIONE RESET FORM (VERSIONAMENTO) ---
+# --- GESTIONE RESET FORM E PERSISTENZA RICERCA ---
 if "form_ingresso_ver" not in st.session_state:
     st.session_state["form_ingresso_ver"] = 0
 if "form_ricerca_ver" not in st.session_state:
     st.session_state["form_ricerca_ver"] = 0
+if "ricerca_attiva" not in st.session_state:
+    st.session_state["ricerca_attiva"] = False
+if "ricerca_query" not in st.session_state:
+    st.session_state["ricerca_query"] = None
+if "ricerca_tipo" not in st.session_state:
+    st.session_state["ricerca_tipo"] = None
 
 def aggiorna_attivita():
     st.session_state['last_action'] = datetime.now(timezone.utc)
@@ -240,7 +246,6 @@ else:
         aggiorna_attivita()
         st.subheader("Ricerca e Spostamento")
         
-        # Inizializzazione variabile di stato per il form
         cerca = False
         with st.form(f"f_ricerca_{st.session_state['form_ricerca_ver']}"):
             tipo = st.radio("Cerca per:", ["Targa", "Numero Chiave"], horizontal=True)
@@ -248,14 +253,20 @@ else:
             cerca = st.form_submit_button("🔍 CERCA")
 
         if cerca and q:
+            st.session_state["ricerca_attiva"] = True
+            st.session_state["ricerca_query"] = q
+            st.session_state["ricerca_tipo"] = tipo
+
+        if st.session_state["ricerca_attiva"]:
+            q = st.session_state["ricerca_query"]
+            tipo = st.session_state["ricerca_tipo"]
             col = "targa" if tipo == "Targa" else "numero_chiave"
             val = q if tipo == "Targa" else int(q) if q.isdigit() else None
+            
             if val is not None:
                 res = supabase.table("parco_usato").select("*").eq(col, val).eq("stato", "PRESENTE").execute()
                 if feedback_ricerca(tipo, q, res.data):
-                    # Reset QR preventivo per nuova ricerca
-                    st.session_state["zona_id_sposta"] = ""
-                    st.session_state["zona_nome_sposta"] = ""
+                    st.session_state["zona_id_sposta"] = st.session_state.get("zona_id_sposta", "")
                     
                     for v in res.data:
                         with st.expander(f"🚗 {v['targa']} - {v['marca_modello']}", expanded=True):
@@ -278,9 +289,10 @@ else:
                                 supabase.table("parco_usato").update({"zona_id": st.session_state["zona_id_sposta"], "zona_attuale": st.session_state["zona_nome_sposta"]}).eq("targa", v['targa']).execute()
                                 registra_log(v['targa'], "Spostamento", f"In {st.session_state['zona_nome_sposta']}", utente_attivo)
                                 
-                                # Reset totale e refresh
                                 st.session_state["zona_id_sposta"] = ""
                                 st.session_state["zona_nome_sposta"] = ""
+                                st.session_state["ricerca_attiva"] = False
+                                st.session_state["ricerca_query"] = None
                                 st.session_state["form_ricerca_ver"] += 1
                                 st.success("✅ Spostata!")
                                 time.sleep(0.5)
@@ -292,9 +304,10 @@ else:
                                     supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute()
                                     registra_log(v['targa'], "Consegna", f"Uscita da {v['zona_attuale']}", utente_attivo)
                                     
-                                    # Reset totale e refresh
                                     st.session_state["zona_id_sposta"] = ""
                                     st.session_state["zona_nome_sposta"] = ""
+                                    st.session_state["ricerca_attiva"] = False
+                                    st.session_state["ricerca_query"] = None
                                     st.session_state["form_ricerca_ver"] += 1
                                     st.success("✅ CONSEGNATA")
                                     time.sleep(0.5)
