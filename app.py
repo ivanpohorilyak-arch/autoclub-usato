@@ -283,7 +283,6 @@ else:
                             
                             if st.session_state.camera_attiva:
                                 foto_sp = st.camera_input(f"Scanner QR Destinazione", key=f"cam_{v['targa']}")
-                                # Blocco scansione multipla
                                 if foto_sp and not st.session_state["zona_id_sposta"]:
                                     z_id_sp = leggi_qr_zona(foto_sp)
                                     if z_id_sp:
@@ -332,7 +331,16 @@ else:
             val_m = q_mod if not q_mod.isdigit() else int(q_mod)
             res = supabase.table("parco_usato").select("*").eq(col_m, val_m).eq("stato", "PRESENTE").execute()
             if feedback_ricerca("Dato", q_mod, res.data):
-                v = res.data[0]
+                
+                # Selezione in caso di risultati multipli
+                if len(res.data) > 1:
+                    st.warning("⚠️ Più vetture trovate, seleziona quella da modificare")
+                    opzioni = {f"{v['targa']} | {v['marca_modello']} | Chiave {v['numero_chiave']}": v for v in res.data}
+                    scelta_v = st.selectbox("Seleziona vettura", list(opzioni.keys()))
+                    v = opzioni[scelta_v]
+                else:
+                    v = res.data[0]
+
                 with st.form("f_mod"):
                     upd = {
                         "marca_modello": st.text_input("Modello", value=v['marca_modello']).upper(),
