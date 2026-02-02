@@ -50,6 +50,11 @@ if 'camera_attiva' not in st.session_state:
 if "ingresso_salvato" not in st.session_state:
     st.session_state["ingresso_salvato"] = False
 
+# --- CAMPI INGRESSO ---
+for k in ["i_marca", "i_modello", "i_colore", "i_km", "i_chiave", "i_note"]:
+    if k not in st.session_state:
+        st.session_state[k] = "" if k not in ["i_km", "i_chiave"] else 0
+
 def aggiorna_attivita():
     st.session_state['last_action'] = datetime.now(timezone.utc)
 
@@ -207,13 +212,13 @@ else:
             else: st.info(f"📍 Zona: **{st.session_state['zona_nome']}**")
            
             targa = st.text_input("TARGA").upper().strip()
-            marca = st.text_input("Marca").upper().strip()
-            modello = st.text_input("Modello").upper().strip()
-            colore = st.text_input("Colore").capitalize().strip()
-            km = st.number_input("Chilometri", min_value=0, step=100)
-            n_chiave = st.number_input("N. Chiave", min_value=0, step=1)
+            marca = st.text_input("Marca", key="i_marca").upper().strip()
+            modello = st.text_input("Modello", key="i_modello").upper().strip()
+            colore = st.text_input("Colore", key="i_colore").capitalize().strip()
+            km = st.number_input("Chilometri", min_value=0, step=100, key="i_km")
+            n_chiave = st.number_input("N. Chiave", min_value=0, step=1, key="i_chiave")
             st.caption("ℹ️ Nota: Chiave con valore 0 indica vetture destinate ai commercianti.")
-            note = st.text_area("Note")
+            note = st.text_area("Note", key="i_note")
             submit = st.form_submit_button("REGISTRA LA VETTURA", disabled=not st.session_state['zona_id'])
 
             if submit:
@@ -234,9 +239,25 @@ else:
 
         info = st.session_state.get("ingresso_salvato")
         if info:
-            st.success(f"✅ Vettura {info['targa']} registrata in {info['zona']}")
-            if st.button("PULISCI E NUOVO INSERIMENTO"):
-                st.session_state["zona_id"] = ""; st.session_state["ingresso_salvato"] = False; st.rerun()
+            st.success("✅ Registrazione completata")
+            st.info(
+                f"""
+        📝 **Riepilogo registrazione**
+        - 🚗 **Targa:** {info['targa']}
+        - 📍 **Zona:** {info['zona']}
+        - 🕒 **Ora:** {info['ora'].astimezone(timezone(timedelta(hours=1))).strftime('%H:%M:%S')}
+        """
+            )
+
+            if st.button("🆕 NUOVA REGISTRAZIONE", use_container_width=True):
+                st.session_state.i_marca = ""
+                st.session_state.i_modello = ""
+                st.session_state.i_colore = ""
+                st.session_state.i_km = 0
+                st.session_state.i_chiave = 0
+                st.session_state.i_note = ""
+                st.session_state["ingresso_salvato"] = False
+                st.rerun()
 
     # --- 9. SEZIONE RICERCA / SPOSTA ---
     elif scelta == "🔍 Ricerca/Sposta":
