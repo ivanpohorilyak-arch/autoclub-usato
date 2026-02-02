@@ -403,13 +403,58 @@ else:
     # --- 12. EXPORT ---
     elif scelta == "📊 Export":
         st.subheader("📊 Export Piazzale")
-        res = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE").execute()
+
+        # --- SELEZIONE ZONA ---
+        zone_export = ["Tutte le zone"] + list(ZONE_INFO.keys())
+        zona_sel = st.selectbox(
+            "📍 Seleziona Zona",
+            zone_export,
+            format_func=lambda x: x if x == "Tutte le zone" else f"{x} - {ZONE_INFO[x]}"
+        )
+
+        # --- QUERY ---
+        query = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE")
+
+        if zona_sel != "Tutte le zone":
+            query = query.eq("zona_id", zona_sel)
+
+        res = query.execute()
+
         if res.data:
             df = pd.DataFrame(res.data)
-            st.dataframe(df[["targa", "marca_modello", "zona_attuale", "numero_chiave"]], use_container_width=True)
+
+            st.dataframe(
+                df[["targa", "marca_modello", "colore", "zona_attuale", "numero_chiave"]],
+                use_container_width=True
+            )
+
+            # --- EXPORT EXCEL CON AUTO-ADATTAMENTO COLONNE ---
             out = BytesIO()
-            with pd.ExcelWriter(out, engine="xlsxwriter") as w: df.to_excel(w, index=False)
-            st.download_button("📥 SCARICA EXCEL", out.getvalue(), "Piazzale.xlsx", use_container_width=True)
+            with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
+                df.to_excel(writer, index=False, sheet_name="Piazzale")
+
+                worksheet = writer.sheets["Piazzale"]
+                for i, col in enumerate(df.columns):
+                    max_len = max(
+                        df[col].astype(str).map(len).max(),
+                        len(col)
+                    ) + 2
+                    worksheet.set_column(i, i, max_len)
+
+            nome_file = (
+                "Piazzale_TutteZone.xlsx"
+                if zona_sel == "Tutte le zone"
+                else f"Piazzale_{zona_sel}.xlsx"
+            )
+
+            st.download_button(
+                "📥 SCARICA EXCEL",
+                out.getvalue(),
+                nome_file,
+                use_container_width=True
+            )
+        else:
+            st.warning("Nessun dato disponibile per la zona selezionata")
 
     # --- 13. VERIFICA ZONE ---
     elif scelta == "📋 Verifica Zone":
