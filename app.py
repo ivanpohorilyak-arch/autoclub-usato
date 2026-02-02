@@ -212,7 +212,7 @@ else:
             colore = st.text_input("Colore").capitalize().strip()
             km = st.number_input("Chilometri", min_value=0, step=100)
             n_chiave = st.number_input("N. Chiave", min_value=0, step=1)
-            st.caption("ℹ️ Nota: Il valore **Chiave = 0** indica vetture destinate ai commercianti.")
+            st.caption("ℹ️ Nota: Chiave con valore 0 indica vetture destinate ai commercianti.")
             note = st.text_area("Note")
             submit = st.form_submit_button("REGISTRA LA VETTURA", disabled=not st.session_state['zona_id'])
 
