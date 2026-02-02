@@ -173,15 +173,6 @@ else:
         st_autorefresh(interval=30000, key="presence_heartbeat")
         aggiorna_presenza(utente_attivo, st.session_state["pagina_attuale"])
         
-        st.markdown("### 👥 Operatori attivi")
-        attivi = get_operatori_attivi(minuti=15)
-        if attivi:
-            for o in attivi:
-                stato = "🟡" if o["utente"] == utente_attivo else "🟢"
-                st.caption(f"{stato} **{o['utente']}**\n_{o.get('pagina','')}_")
-        else:
-            st.caption("Nessun altro operatore collegato")
-        
         st.markdown("---")
         st.markdown("### 📷 Scanner QR")
         st.checkbox("Attiva scanner", key="camera_attiva")
@@ -328,17 +319,86 @@ else:
     # --- 11. DASHBOARD GENERALE ---
     elif scelta == "📊 Dashboard Generale":
         st.subheader("📊 Dashboard Generale")
-        res_p = supabase.table("parco_usato").select("*").eq("stato", "PRESENTE").execute()
-        presenti = res_p.data or []
-        st.metric("🚗 In Piazzale", len(presenti))
-        # Logica KPI rapida
-        inizio_oggi = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0)
-        res_log = supabase.table("log_movimenti").select("azione").gte("created_at", inizio_oggi.isoformat()).execute()
-        azioni = [r["azione"] for r in res_log.data] if res_log.data else []
-        g1, g2, g3 = st.columns(3)
-        g1.metric("➕ Ingressi Oggi", azioni.count("Ingresso"))
-        g2.metric("🔄 Spostamenti Oggi", azioni.count("Spostamento"))
-        g3.metric("🔴 Consegne Oggi", azioni.count("Consegna"))
+
+        # --- FILTRI ---
+        c1, c2 = st.columns(2)
+
+        with c1:
+            periodo = st.selectbox(
+                "📅 Periodo",
+                ["Oggi", "Ieri", "Ultimi 7 giorni", "Ultimi 30 giorni"]
+            )
+
+        # lista operatori
+        res_ut = supabase.table("utenti").select("nome").eq("attivo", True).order("nome").execute()
+        lista_operatori = ["Tutti"] + [u["nome"] for u in res_ut.data] if res_ut.data else ["Tutti"]
+
+        with c2:
+            operatore_sel = st.selectbox("👤 Operatore", lista_operatori)
+
+        # --- CALCOLO DATE ---
+        now = datetime.now(timezone.utc)
+
+        if periodo == "Oggi":
+            data_inizio = now.replace(hour=0, minute=0, second=0)
+            data_fine = None
+
+        elif periodo == "Ieri":
+            data_fine = now.replace(hour=0, minute=0, second=0)
+            data_inizio = data_fine - timedelta(days=1)
+
+        elif periodo == "Ultimi 7 giorni":
+            data_inizio = now - timedelta(days=7)
+            data_fine = None
+
+        elif periodo == "Ultimi 30 giorni":
+            data_inizio = now - timedelta(days=30)
+            data_fine = None
+
+        # --- QUERY LOG ---
+        query = supabase.table("log_movimenti").select("*").gte(
+            "created_at", data_inizio.isoformat()
+        )
+
+        if data_fine:
+            query = query.lt("created_at", data_fine.isoformat())
+
+        if operatore_sel != "Tutti":
+            query = query.eq("utente", operatore_sel)
+
+        res_log = query.order("created_at", desc=True).execute()
+        log_filtrati = res_log.data or []
+
+        # --- KPI GENERALI ---
+        res_p = supabase.table("parco_usato").select("targa").eq("stato", "PRESENTE").execute()
+        st.metric("🚗 In Piazzale", len(res_p.data or []))
+
+        azioni = [r["azione"] for r in log_filtrati]
+
+        k1, k2, k3 = st.columns(3)
+        k1.metric("➕ Ingressi", azioni.count("Ingresso"))
+        k2.metric("🔄 Spostamenti", azioni.count("Spostamento"))
+        k3.metric("🔴 Consegne", azioni.count("Consegna"))
+
+        st.markdown("---")
+        st.caption(f"Periodo: **{periodo}** | Operatore: **{operatore_sel}**")
+
+        # --- TABELLA ATTIVITÀ ---
+        if log_filtrati:
+            df = pd.DataFrame(log_filtrati)
+            df["Ora"] = (
+                pd.to_datetime(df["created_at"])
+                .dt.tz_convert("Europe/Rome")
+                .dt.strftime("%d/%m %H:%M:%S")
+            )
+
+            st.markdown("### 🕒 Attività")
+            st.dataframe(
+                df[["Ora", "utente", "targa", "azione", "dettaglio"]],
+                use_container_width=True
+            )
+        else:
+            st.info("Nessuna attività per il periodo e filtro selezionati")
 
     # --- 12. EXPORT ---
     elif scelta == "📊 Export":
