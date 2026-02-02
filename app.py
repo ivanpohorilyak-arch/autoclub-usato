@@ -297,24 +297,24 @@ else:
 
         c1, c2 = st.columns(2)
         with c1:
-            periodo = st.selectbox("📅 Periodo", ["Oggi", "Ieri", "Ultimi 7 giorni", "Ultimi 30 giorni"])
+            periodo_dash = st.selectbox("📅 Periodo", ["Oggi", "Ieri", "Ultimi 7 giorni", "Ultimi 30 giorni"], key="dash_period")
 
         res_ut = supabase.table("utenti").select("nome").eq("attivo", True).order("nome").execute()
         lista_operatori = ["Tutti"] + [u["nome"] for u in res_ut.data] if res_ut.data else ["Tutti"]
         with c2:
-            operatore_sel = st.selectbox("👤 Operatore", lista_operatori)
+            operatore_sel = st.selectbox("👤 Operatore", lista_operatori, key="dash_op")
 
         now = datetime.now(timezone.utc)
-        if periodo == "Oggi":
+        if periodo_dash == "Oggi":
             data_inizio = now.replace(hour=0, minute=0, second=0, microsecond=0)
             data_fine = None
-        elif periodo == "Ieri":
+        elif periodo_dash == "Ieri":
             data_fine = now.replace(hour=0, minute=0, second=0, microsecond=0)
             data_inizio = data_fine - timedelta(days=1)
-        elif periodo == "Ultimi 7 giorni":
+        elif periodo_dash == "Ultimi 7 giorni":
             data_inizio = now - timedelta(days=7)
             data_fine = None
-        elif periodo == "Ultimi 30 giorni":
+        elif periodo_dash == "Ultimi 30 giorni":
             data_inizio = now - timedelta(days=30)
             data_fine = None
 
@@ -358,12 +358,6 @@ else:
             kpi_zona.append({"Zona": f"{z_id} - {z_nome}", "➕ Ingressi": z_in, "🔄 Spostamenti": z_sp, "🔴 Consegne": z_out})
         st.dataframe(pd.DataFrame(kpi_zona), use_container_width=True)
 
-        if log_data:
-            df = pd.DataFrame(log_data)
-            df["Ora"] = pd.to_datetime(df["created_at"]).dt.tz_convert("Europe/Rome").dt.strftime("%d/%m %H:%M:%S")
-            st.markdown("### 🕒 Attività registrate")
-            st.dataframe(df[["Ora", "utente", "targa", "azione", "dettaglio"]], use_container_width=True)
-
     # --- 12. EXPORT ---
     elif scelta == "📊 Export":
         st.subheader("📊 Export Piazzale")
@@ -391,15 +385,82 @@ else:
     # --- 14. SEZIONE LOG ---
     elif scelta == "📜 Log":
         st.subheader("📜 Registro Movimenti")
+
+        # --- FILTRO PERIODO ---
+        periodo = st.selectbox(
+            "📅 Periodo",
+            ["Oggi", "Ieri", "Settimana", "Mese", "Anno", "Tutto"],
+            index=0
+        )
+
+        now = datetime.now(timezone.utc)
+
+        if periodo == "Oggi":
+            data_inizio = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            data_fine = None
+        elif periodo == "Ieri":
+            data_fine = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            data_inizio = data_fine - timedelta(days=1)
+        elif periodo == "Settimana":
+            data_inizio = now - timedelta(days=7)
+            data_fine = None
+        elif periodo == "Mese":
+            data_inizio = now - timedelta(days=30)
+            data_fine = None
+        elif periodo == "Anno":
+            data_inizio = now - timedelta(days=365)
+            data_fine = None
+        else:  # Tutto
+            data_inizio = None
+            data_fine = None
+
+        # --- UTENTI ATTUALI (per warning rinominati) ---
         res_ut = supabase.table("utenti").select("nome").execute()
         utenti_attuali = {u["nome"] for u in res_ut.data} if res_ut.data else set()
-        res = supabase.table("log_movimenti").select("*").order("created_at", desc=True).limit(50).execute()
+
+        # --- QUERY LOG ---
+        query = supabase.table("log_movimenti").select("*")
+        if data_inizio:
+            query = query.gte("created_at", data_inizio.isoformat())
+        if data_fine:
+            query = query.lt("created_at", data_fine.isoformat())
+
+        res = query.order("created_at", desc=True).limit(2000).execute()
+
         if res.data:
             df = pd.DataFrame(res.data)
-            df["Ora"] = pd.to_datetime(df["created_at"]).dt.tz_convert("Europe/Rome").dt.strftime("%H:%M:%S")
-            df["Utente"] = df["utente"].apply(lambda u: u if u in utenti_attuali else f"{u} ⚠️")
-            st.caption("⚠️ Utenti con nome modificato o non più presenti sono evidenziati con ⚠️")
-            st.dataframe(df[["Ora", "targa", "azione", "Utente", "dettaglio"]], use_container_width=True)
+            # orario locale
+            df["Ora"] = (
+                pd.to_datetime(df["created_at"])
+                .dt.tz_convert("Europe/Rome")
+                .dt.strftime("%d/%m/%Y %H:%M:%S")
+            )
+            # evidenzia utenti non più presenti
+            df["Utente"] = df["utente"].apply(
+                lambda u: u if u in utenti_attuali else f"{u} ⚠️"
+            )
+
+            df_view = df[["Ora", "targa", "azione", "Utente", "dettaglio"]]
+            st.caption(f"📌 Periodo selezionato: **{periodo}** — ⚠️ utenti rinominati o non più attivi")
+            st.dataframe(df_view, use_container_width=True)
+
+            # --- EXPORT EXCEL ---
+            out = BytesIO()
+            with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
+                df_view.to_excel(writer, index=False, sheet_name="Log Movimenti")
+                worksheet = writer.sheets["Log Movimenti"]
+                for i, col in enumerate(df_view.columns):
+                    max_len = max(df_view[col].astype(str).map(len).max(), len(col)) + 2
+                    worksheet.set_column(i, i, max_len)
+
+            st.download_button(
+                "📥 SCARICA LOG IN EXCEL",
+                out.getvalue(),
+                f"Log_Movimenti_{periodo}.xlsx",
+                use_container_width=True
+            )
+        else:
+            st.info("Nessun movimento registrato per il periodo selezionato.")
 
     # --- 15. STAMPA QR ---
     elif scelta == "🖨️ Stampa QR":
