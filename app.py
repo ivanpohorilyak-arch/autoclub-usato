@@ -245,6 +245,11 @@ else:
                     for v in res.data:
                         with st.expander(f"🚗 {v['targa']} - {v['marca_modello']}", expanded=True):
                             st.write(f"📍 Posizione attuale: **{v['zona_attuale']}**")
+                            
+                            # Informativa obbligatoria per spostamento
+                            if not st.session_state.camera_attiva:
+                                st.warning("⚠️ Per spostare questa vettura, attiva lo **Scanner QR** nella Sidebar e inquadra il QR della zona di destinazione.")
+                            
                             if st.session_state.camera_attiva:
                                 foto_sp = st.camera_input(f"Scanner QR Destinazione", key=f"cam_{v['targa']}")
                                 if foto_sp:
@@ -252,7 +257,7 @@ else:
                                     if z_id_sp:
                                         st.session_state["zona_id_sposta"] = z_id_sp
                                         st.session_state["zona_nome_sposta"] = ZONE_INFO[z_id_sp]
-                                        st.success(f"🎯 Destinazione: {st.session_state['zona_nome_sposta']}")
+                                        st.success(f"🎯 Destinazione rilevata: {st.session_state['zona_nome_sposta']}")
                             
                             c1, c2 = st.columns(2)
                             if c1.button("SPOSTA QUI", key=f"b_{v['targa']}", disabled=not st.session_state['zona_id_sposta'], use_container_width=True):
