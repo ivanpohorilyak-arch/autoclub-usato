@@ -55,6 +55,16 @@ for k in ["i_marca", "i_modello", "i_colore", "i_km", "i_chiave", "i_note"]:
     if k not in st.session_state:
         st.session_state[k] = "" if k not in ["i_km", "i_chiave"] else 0
 
+# --- FUNZIONE RESET (NUOVA) ---
+def reset_campi_ingresso():
+    for k in ["i_marca", "i_modello", "i_colore", "i_note"]:
+        st.session_state[k] = ""
+    st.session_state["i_km"] = 0
+    st.session_state["i_chiave"] = 0
+    st.session_state["zona_id"] = ""
+    st.session_state["zona_nome"] = ""
+    st.session_state["camera_attiva"] = False
+
 def aggiorna_attivita():
     st.session_state['last_action'] = datetime.now(timezone.utc)
 
@@ -227,6 +237,7 @@ else:
                 </div>
                 """, unsafe_allow_html=True)
             if st.button("🆕 NUOVA REGISTRAZIONE", use_container_width=True):
+                reset_campi_ingresso()
                 st.session_state["ingresso_salvato"] = False
                 st.rerun()
 
@@ -246,7 +257,6 @@ else:
                         with st.expander(f"🚗 {v['targa']} - {v['marca_modello']}", expanded=True):
                             st.write(f"📍 Posizione attuale: **{v['zona_attuale']}**")
                             
-                            # Informativa obbligatoria per spostamento
                             if not st.session_state.camera_attiva:
                                 st.warning("⚠️ Per spostare questa vettura, attiva lo **Scanner QR** nella Sidebar e inquadra il QR della zona di destinazione.")
                             
@@ -299,11 +309,9 @@ else:
     # --- 11. DASHBOARD GENERALE ---
     elif scelta == "📊 Dashboard Generale":
         st.subheader("📊 Dashboard Generale")
-
         c1, c2 = st.columns(2)
         with c1:
             periodo_dash = st.selectbox("📅 Periodo", ["Oggi", "Ieri", "Ultimi 7 giorni", "Ultimi 30 giorni"], key="dash_period")
-
         res_ut = supabase.table("utenti").select("nome").eq("attivo", True).order("nome").execute()
         lista_operatori = ["Tutti"] + [u["nome"] for u in res_ut.data] if res_ut.data else ["Tutti"]
         with c2:
@@ -326,11 +334,9 @@ else:
         query = supabase.table("log_movimenti").select("*").gte("created_at", data_inizio.isoformat())
         if data_fine: query = query.lt("created_at", data_fine.isoformat())
         if operatore_sel != "Tutti": query = query.eq("utente", operatore_sel)
-        
         res_log = query.order("created_at", desc=True).execute()
         log_data = res_log.data or []
 
-        # KPI Globali
         azioni = [r["azione"] for r in log_data]
         res_p = supabase.table("parco_usato").select("targa").eq("stato", "PRESENTE").execute()
         tot_piazzale = len(res_p.data or [])
@@ -350,7 +356,6 @@ else:
             o3.metric("🔴 Consegne", azioni_op.count("Consegna"))
 
         st.markdown("---")
-        # KPI Per Zona
         st.markdown("### 📍 KPI per Zona")
         kpi_zona = []
         for z_id, z_nome in ZONE_INFO.items():
@@ -390,16 +395,8 @@ else:
     # --- 14. SEZIONE LOG ---
     elif scelta == "📜 Log":
         st.subheader("📜 Registro Movimenti")
-
-        # --- FILTRO PERIODO ---
-        periodo = st.selectbox(
-            "📅 Periodo",
-            ["Oggi", "Ieri", "Settimana", "Mese", "Anno", "Tutto"],
-            index=0
-        )
-
+        periodo = st.selectbox("📅 Periodo", ["Oggi", "Ieri", "Settimana", "Mese", "Anno", "Tutto"], index=0)
         now = datetime.now(timezone.utc)
-
         if periodo == "Oggi":
             data_inizio = now.replace(hour=0, minute=0, second=0, microsecond=0)
             data_fine = None
@@ -415,57 +412,29 @@ else:
         elif periodo == "Anno":
             data_inizio = now - timedelta(days=365)
             data_fine = None
-        else:  # Tutto
+        else:
             data_inizio = None
             data_fine = None
 
-        # --- UTENTI ATTUALI (per warning rinominati) ---
         res_ut = supabase.table("utenti").select("nome").execute()
         utenti_attuali = {u["nome"] for u in res_ut.data} if res_ut.data else set()
-
-        # --- QUERY LOG ---
         query = supabase.table("log_movimenti").select("*")
-        if data_inizio:
-            query = query.gte("created_at", data_inizio.isoformat())
-        if data_fine:
-            query = query.lt("created_at", data_fine.isoformat())
-
+        if data_inizio: query = query.gte("created_at", data_inizio.isoformat())
+        if data_fine: query = query.lt("created_at", data_fine.isoformat())
         res = query.order("created_at", desc=True).limit(2000).execute()
 
         if res.data:
             df = pd.DataFrame(res.data)
-            # orario locale
-            df["Ora"] = (
-                pd.to_datetime(df["created_at"])
-                .dt.tz_convert("Europe/Rome")
-                .dt.strftime("%d/%m/%Y %H:%M:%S")
-            )
-            # evidenzia utenti non più presenti
-            df["Utente"] = df["utente"].apply(
-                lambda u: u if u in utenti_attuali else f"{u} ⚠️"
-            )
-
+            df["Ora"] = pd.to_datetime(df["created_at"]).dt.tz_convert("Europe/Rome").dt.strftime("%d/%m/%Y %H:%M:%S")
+            df["Utente"] = df["utente"].apply(lambda u: u if u in utenti_attuali else f"{u} ⚠️")
             df_view = df[["Ora", "targa", "azione", "Utente", "dettaglio"]]
             st.caption(f"📌 Periodo selezionato: **{periodo}** — ⚠️ utenti rinominati o non più attivi")
             st.dataframe(df_view, use_container_width=True)
-
-            # --- EXPORT EXCEL ---
             out = BytesIO()
             with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
                 df_view.to_excel(writer, index=False, sheet_name="Log Movimenti")
-                worksheet = writer.sheets["Log Movimenti"]
-                for i, col in enumerate(df_view.columns):
-                    max_len = max(df_view[col].astype(str).map(len).max(), len(col)) + 2
-                    worksheet.set_column(i, i, max_len)
-
-            st.download_button(
-                "📥 SCARICA LOG IN EXCEL",
-                out.getvalue(),
-                f"Log_Movimenti_{periodo}.xlsx",
-                use_container_width=True
-            )
-        else:
-            st.info("Nessun movimento registrato per il periodo selezionato.")
+            st.download_button("📥 SCARICA LOG IN EXCEL", out.getvalue(), f"Log_Movimenti_{periodo}.xlsx", use_container_width=True)
+        else: st.info("Nessun movimento registrato.")
 
     # --- 15. STAMPA QR ---
     elif scelta == "🖨️ Stampa QR":
@@ -495,29 +464,22 @@ else:
     # --- 18. GESTIONE UTENTI (ADMIN ONLY) ---
     elif scelta == "👥 Gestione Utenti":
         st.subheader("👥 Gestione Utenti (Admin)")
-        if st.session_state["ruolo"] != "admin":
-            st.error("Accesso non autorizzato"); st.stop()
-        
+        if st.session_state["ruolo"] != "admin": st.error("Accesso non autorizzato"); st.stop()
         res_all = supabase.table("utenti").select("*").order("nome").execute()
         if res_all.data:
             df_ut = pd.DataFrame(res_all.data)
             st.dataframe(df_ut[["nome", "ruolo", "attivo"]], use_container_width=True)
-
         with st.form("add_user"):
             st.markdown("### ➕ Aggiungi Utente")
-            n = st.text_input("Nome e Cognome")
-            p = st.text_input("PIN", type="password")
-            r = st.selectbox("Ruolo", ["operatore", "admin"])
+            n = st.text_input("Nome e Cognome"); p = st.text_input("PIN", type="password"); r = st.selectbox("Ruolo", ["operatore", "admin"])
             if st.form_submit_button("CREA"):
                 supabase.table("utenti").insert({"nome": n, "pin": p, "ruolo": r, "attivo": True}).execute()
                 st.success("Creato"); time.sleep(1); st.rerun()
-
         st.markdown("---")
         st.markdown("### ✏️ Modifica / Disattiva Utente")
         nomi_utenti = [u["nome"] for u in res_all.data]
         u_sel = st.selectbox("Seleziona utente", nomi_utenti)
         ut = next(u for u in res_all.data if u["nome"] == u_sel)
-
         with st.form("edit_user"):
             new_pin = st.text_input("Nuovo PIN (lascia vuoto per non cambiare)", type="password")
             new_ruolo = st.selectbox("Ruolo", ["operatore", "admin"], index=0 if ut["ruolo"] == "operatore" else 1)
