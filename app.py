@@ -61,6 +61,8 @@ if "ricerca_query" not in st.session_state:
     st.session_state["ricerca_query"] = None
 if "ricerca_tipo" not in st.session_state:
     st.session_state["ricerca_tipo"] = None
+if "ricerca_feedback_ok" not in st.session_state:
+    st.session_state["ricerca_feedback_ok"] = False
 
 def aggiorna_attivita():
     st.session_state['last_action'] = datetime.now(timezone.utc)
@@ -256,6 +258,7 @@ else:
             st.session_state["ricerca_attiva"] = True
             st.session_state["ricerca_query"] = q
             st.session_state["ricerca_tipo"] = tipo
+            st.session_state["ricerca_feedback_ok"] = False
 
         if st.session_state["ricerca_attiva"]:
             q = st.session_state["ricerca_query"]
@@ -265,9 +268,12 @@ else:
             
             if val is not None:
                 res = supabase.table("parco_usato").select("*").eq(col, val).eq("stato", "PRESENTE").execute()
-                if feedback_ricerca(tipo, q, res.data):
-                    st.session_state["zona_id_sposta"] = st.session_state.get("zona_id_sposta", "")
-                    
+                
+                if not st.session_state["ricerca_feedback_ok"]:
+                    ok = feedback_ricerca(tipo, q, res.data)
+                    st.session_state["ricerca_feedback_ok"] = ok
+
+                if st.session_state["ricerca_feedback_ok"]:
                     for v in res.data:
                         with st.expander(f"🚗 {v['targa']} - {v['marca_modello']}", expanded=True):
                             st.write(f"📍 Posizione attuale: **{v['zona_attuale']}**")
@@ -277,7 +283,8 @@ else:
                             
                             if st.session_state.camera_attiva:
                                 foto_sp = st.camera_input(f"Scanner QR Destinazione", key=f"cam_{v['targa']}")
-                                if foto_sp:
+                                # Blocco scansione multipla
+                                if foto_sp and not st.session_state["zona_id_sposta"]:
                                     z_id_sp = leggi_qr_zona(foto_sp)
                                     if z_id_sp:
                                         st.session_state["zona_id_sposta"] = z_id_sp
@@ -293,6 +300,7 @@ else:
                                 st.session_state["zona_nome_sposta"] = ""
                                 st.session_state["ricerca_attiva"] = False
                                 st.session_state["ricerca_query"] = None
+                                st.session_state["ricerca_feedback_ok"] = False
                                 st.session_state["form_ricerca_ver"] += 1
                                 st.success("✅ Spostata!")
                                 time.sleep(0.5)
@@ -308,6 +316,7 @@ else:
                                     st.session_state["zona_nome_sposta"] = ""
                                     st.session_state["ricerca_attiva"] = False
                                     st.session_state["ricerca_query"] = None
+                                    st.session_state["ricerca_feedback_ok"] = False
                                     st.session_state["form_ricerca_ver"] += 1
                                     st.success("✅ CONSEGNATA")
                                     time.sleep(0.5)
