@@ -188,6 +188,10 @@ else:
     if scelta == "➕ Ingresso":
         aggiorna_attivita()
         st.subheader("Registrazione Nuova Vettura")
+        
+        if not st.session_state.camera_attiva:
+            st.warning("⚠️ Per registrare una nuova vettura è necessario **attivare lo scanner QR code** nella Sidebar.")
+        
         if st.session_state.camera_attiva:
             foto_z = st.camera_input("Scansiona QR della Zona", key="cam_in")
             if foto_z:
@@ -199,7 +203,7 @@ else:
                 else: st.error("❌ QR non valido")
 
         with st.form("f_ingresso"):
-            if not st.session_state['zona_id']: st.error("❌ Scansione QR Obbligatoria")
+            if not st.session_state['zona_id']: st.error("❌ Scansione QR Obbligatoria per abilitare i campi")
             else: st.info(f"📍 Zona: **{st.session_state['zona_nome']}**")
            
             targa = st.text_input("TARGA").upper().strip()
@@ -208,6 +212,7 @@ else:
             colore = st.text_input("Colore").capitalize().strip()
             km = st.number_input("Chilometri", min_value=0, step=100)
             n_chiave = st.number_input("N. Chiave", min_value=0, step=1)
+            st.caption("ℹ️ Nota: Il valore **Chiave = 0** indica vetture destinate ai commercianti.")
             note = st.text_area("Note")
             submit = st.form_submit_button("REGISTRA LA VETTURA", disabled=not st.session_state['zona_id'])
 
@@ -247,7 +252,11 @@ else:
                 if feedback_ricerca(tipo, q, res.data):
                     for v in res.data:
                         with st.expander(f"🚗 {v['targa']} - {v['marca_modello']}", expanded=True):
-                            st.write(f"📍 Posizione: **{v['zona_attuale']}**")
+                            st.write(f"📍 Posizione attuale: **{v['zona_attuale']}**")
+                            
+                            if not st.session_state.camera_attiva:
+                                st.info("ℹ️ Per spostare la vettura, **attiva lo scanner QR code** nella Sidebar per inquadrare la destinazione.")
+                            
                             if st.session_state.camera_attiva:
                                 foto_sp = st.camera_input(f"Scanner QR Destinazione", key=f"cam_{v['targa']}")
                                 if foto_sp:
@@ -255,6 +264,7 @@ else:
                                     if z_id_sp:
                                         st.session_state["zona_id_sposta"] = z_id_sp
                                         st.session_state["zona_nome_sposta"] = ZONE_INFO[z_id_sp]
+                                        st.success(f"🎯 Destinazione rilevata: {st.session_state['zona_nome_sposta']}")
                             
                             c1, c2 = st.columns(2)
                             if c1.button("SPOSTA QUI", key=f"b_{v['targa']}", disabled=not st.session_state['zona_id_sposta'], use_container_width=True):
