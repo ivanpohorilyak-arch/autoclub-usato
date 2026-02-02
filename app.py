@@ -294,19 +294,74 @@ else:
     # --- 11. DASHBOARD GENERALE ---
     elif scelta == "📊 Dashboard Generale":
         st.subheader("📊 Dashboard Generale")
+
         c1, c2 = st.columns(2)
-        with c1: periodo = st.selectbox("📅 Periodo", ["Oggi", "Ieri", "Ultimi 7 giorni", "Ultimi 30 giorni"])
+        with c1:
+            periodo = st.selectbox("📅 Periodo", ["Oggi", "Ieri", "Ultimi 7 giorni", "Ultimi 30 giorni"])
+
         res_ut = supabase.table("utenti").select("nome").eq("attivo", True).order("nome").execute()
         lista_operatori = ["Tutti"] + [u["nome"] for u in res_ut.data] if res_ut.data else ["Tutti"]
-        with c2: operatore_sel = st.selectbox("👤 Operatore", lista_operatori)
+        with c2:
+            operatore_sel = st.selectbox("👤 Operatore", lista_operatori)
+
         now = datetime.now(timezone.utc)
-        data_inizio = now.replace(hour=0, minute=0, second=0) if periodo == "Oggi" else now - timedelta(days=7)
+        if periodo == "Oggi":
+            data_inizio = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            data_fine = None
+        elif periodo == "Ieri":
+            data_fine = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            data_inizio = data_fine - timedelta(days=1)
+        elif periodo == "Ultimi 7 giorni":
+            data_inizio = now - timedelta(days=7)
+            data_fine = None
+        elif periodo == "Ultimi 30 giorni":
+            data_inizio = now - timedelta(days=30)
+            data_fine = None
+
         query = supabase.table("log_movimenti").select("*").gte("created_at", data_inizio.isoformat())
+        if data_fine: query = query.lt("created_at", data_fine.isoformat())
         if operatore_sel != "Tutti": query = query.eq("utente", operatore_sel)
+        
         res_log = query.order("created_at", desc=True).execute()
-        if res_log.data:
-            df = pd.DataFrame(res_log.data)
-            df["Ora"] = pd.to_datetime(df["created_at"]).dt.tz_convert("Europe/Rome").dt.strftime("%d/%m %H:%M")
+        log_data = res_log.data or []
+
+        # KPI Globali
+        azioni = [r["azione"] for r in log_data]
+        res_p = supabase.table("parco_usato").select("targa").eq("stato", "PRESENTE").execute()
+        tot_piazzale = len(res_p.data or [])
+
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("🚗 In Piazzale", tot_piazzale)
+        k2.metric("➕ Ingressi", azioni.count("Ingresso"))
+        k3.metric("🔄 Spostamenti", azioni.count("Spostamento"))
+        k4.metric("🔴 Consegne", azioni.count("Consegna"))
+
+        if operatore_sel != "Tutti":
+            st.markdown("### 👤 Attività Operatore")
+            azioni_op = [r["azione"] for r in log_data if r["utente"] == operatore_sel]
+            o1, o2, o3 = st.columns(3)
+            o1.metric("➕ Ingressi", azioni_op.count("Ingresso"))
+            o2.metric("🔄 Spostamenti", azioni_op.count("Spostamento"))
+            o3.metric("🔴 Consegne", azioni_op.count("Consegna"))
+
+        st.markdown("---")
+        # KPI Per Zona
+        st.markdown("### 📍 KPI per Zona")
+        kpi_zona = []
+        for z_id, z_nome in ZONE_INFO.items():
+            z_in, z_sp, z_out = 0, 0, 0
+            for r in log_data:
+                if z_nome in (r.get("dettaglio") or ""):
+                    if r["azione"] == "Ingresso": z_in += 1
+                    elif r["azione"] == "Spostamento": z_sp += 1
+                    elif r["azione"] == "Consegna": z_out += 1
+            kpi_zona.append({"Zona": f"{z_id} - {z_nome}", "➕ Ingressi": z_in, "🔄 Spostamenti": z_sp, "🔴 Consegne": z_out})
+        st.dataframe(pd.DataFrame(kpi_zona), use_container_width=True)
+
+        if log_data:
+            df = pd.DataFrame(log_data)
+            df["Ora"] = pd.to_datetime(df["created_at"]).dt.tz_convert("Europe/Rome").dt.strftime("%d/%m %H:%M:%S")
+            st.markdown("### 🕒 Attività registrate")
             st.dataframe(df[["Ora", "utente", "targa", "azione", "dettaglio"]], use_container_width=True)
 
     # --- 12. EXPORT ---
