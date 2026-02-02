@@ -273,7 +273,9 @@ else:
                                 st.session_state["zona_id_sposta"] = ""; st.success("✅ Spostata!"); time.sleep(1); st.rerun()
                             
                             with c2:
-                                if st.button("🔴 CONSEGNA", key=f"btn_{v['targa']}", use_container_width=True):
+                                st.write("---")
+                                conferma_consegna = st.checkbox("Confermo la CONSEGNA definitiva", key=f"conf_{v['targa']}")
+                                if st.button("🔴 CONSEGNA", key=f"btn_{v['targa']}", disabled=not conferma_consegna, use_container_width=True):
                                     supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute()
                                     registra_log(v['targa'], "Consegna", f"Uscita da {v['zona_attuale']}", utente_attivo)
                                     st.success("✅ CONSEGNATA"); time.sleep(1); st.rerun()
