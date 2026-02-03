@@ -310,7 +310,7 @@ else:
                 abilita_mod = col_b.checkbox("✏️ Modifica", key="chk_mod")
                 abilita_consegna = col_c.checkbox("🔴 Consegna", key="chk_cons")
 
-                # SPOSTAMENTO CON NOTE PERSISTENTI
+                # SPOSTAMENTO CON UX OTTIMIZZATA
                 if abilita_spost:
                     if not st.session_state.camera_attiva:
                         st.warning("📷 Per spostare la vettura devi **attivare lo Scanner QR** dalla sidebar")
@@ -324,26 +324,37 @@ else:
                             key=f"nota_sp_{v['targa']}"
                         )
 
-                        foto = st.camera_input("Scanner QR Destinazione", key=f"cam_sp_{v['targa']}")
+                        foto = st.camera_input("📷 Scanner QR Zona Destinazione", key=f"cam_sp_{v['targa']}")
+                        
+                        zona_rilevata = None
+                        zona_nome_dest = None
+
                         if foto:
                             z_id = leggi_qr_zona(foto)
                             if z_id:
-                                z_nome = ZONE_INFO[z_id]
-                                if st.button(f"CONFERMA SPOSTAMENTO IN {z_nome}", use_container_width=True):
-                                    nuova_nota = v["note"] or ""
-                                    if nota_spost:
-                                        nuova_nota = f"{nuova_nota}\n[{datetime.now().strftime('%d/%m %H:%M')}] {nota_spost}"
+                                zona_rilevata = z_id
+                                zona_nome_dest = ZONE_INFO[z_id]
+                                st.success(f"🎯 Zona rilevata: **{zona_nome_dest}**")
+                            else:
+                                st.error("❌ QR non valido")
 
-                                    supabase.table("parco_usato").update({
-                                        "zona_id": z_id, 
-                                        "zona_attuale": z_nome,
-                                        "note": nuova_nota
-                                    }).eq("targa", v["targa"]).execute()
-                                    
-                                    registra_log(v["targa"], "Spostamento", f"In {z_nome}" + (f" | Nota: {nota_spost}" if nota_spost else ""), utente_attivo)
-                                    st.success("✅ Spostamento completato!")
-                                    reset_ricerca()
-                                    time.sleep(0.5); st.rerun()
+                        if zona_rilevata:
+                            st.markdown("---")
+                            if st.button(f"➡️ SPOSTA IN {zona_nome_dest}", use_container_width=True):
+                                nuova_nota = v["note"] or ""
+                                if nota_spost:
+                                    nuova_nota = f"{nuova_nota}\n[{datetime.now().strftime('%d/%m %H:%M')}] {nota_spost}"
+
+                                supabase.table("parco_usato").update({
+                                    "zona_id": zona_rilevata, 
+                                    "zona_attuale": zona_nome_dest,
+                                    "note": nuova_nota
+                                }).eq("targa", v["targa"]).execute()
+                                
+                                registra_log(v["targa"], "Spostamento", f"In {zona_nome_dest}" + (f" | Nota: {nota_spost}" if nota_spost else ""), utente_attivo)
+                                st.success("✅ Vettura spostata correttamente")
+                                reset_ricerca()
+                                time.sleep(0.5); st.rerun()
 
                 # MODIFICA
                 if abilita_mod:
