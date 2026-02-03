@@ -33,7 +33,7 @@ ZONE_INFO = {
 
 TIMEOUT_MINUTI = 20
 
-st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1 Master", layout="wide")
+st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.2", layout="wide")
 
 # --- 3. GESTIONE SESSIONE ---
 if 'user_autenticato' not in st.session_state:
