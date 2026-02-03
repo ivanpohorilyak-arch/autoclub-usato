@@ -40,6 +40,8 @@ if 'user_autenticato' not in st.session_state:
     st.session_state['user_autenticato'] = None
 if 'ruolo' not in st.session_state:
     st.session_state['ruolo'] = None
+if 'can_consegna' not in st.session_state:
+    st.session_state['can_consegna'] = False
 if 'last_action' not in st.session_state:
     st.session_state['last_action'] = datetime.now(timezone.utc)
 if 'zona_id' not in st.session_state: st.session_state['zona_id'] = ""
@@ -74,12 +76,13 @@ def controllo_timeout():
         if trascorso > timedelta(minutes=TIMEOUT_MINUTI):
             st.session_state['user_autenticato'] = None
             st.session_state['ruolo'] = None
+            st.session_state['can_consegna'] = False
             st.rerun()
 
 # --- 4. FUNZIONI LOGIN & DATABASE ---
 def login_db(nome, pin):
     try:
-        res = supabase.table("utenti").select("nome, ruolo").eq("nome", nome).eq("pin", pin).eq("attivo", True).limit(1).execute()
+        res = supabase.table("utenti").select("nome, ruolo, can_consegna").eq("nome", nome).eq("pin", pin).eq("attivo", True).limit(1).execute()
         return res.data[0] if res.data else None
     except Exception as e:
         st.error(f"Errore login: {e}")
@@ -148,6 +151,7 @@ if st.session_state['user_autenticato'] is None:
         if user:
             st.session_state['user_autenticato'] = user["nome"]
             st.session_state['ruolo'] = user["ruolo"]
+            st.session_state['can_consegna'] = user.get("can_consegna", False)
             aggiorna_attivita()
             st.rerun()
         else: st.error("Accesso negato: PIN errato o utente non attivo")
@@ -307,20 +311,23 @@ else:
                                 st.rerun()
                             
                             with c2:
-                                conferma_consegna = st.checkbox("Confermo la CONSEGNA", key=f"conf_{v['targa']}")
-                                if st.button("🔴 CONSEGNA", key=f"btn_{v['targa']}", disabled=not conferma_consegna, use_container_width=True):
-                                    supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute()
-                                    registra_log(v['targa'], "Consegna", f"Uscita da {v['zona_attuale']}", utente_attivo)
-                                    
-                                    st.session_state["zona_id_sposta"] = ""
-                                    st.session_state["zona_nome_sposta"] = ""
-                                    st.session_state["ricerca_attiva"] = False
-                                    st.session_state["ricerca_query"] = None
-                                    st.session_state["ricerca_feedback_ok"] = False
-                                    st.session_state["form_ricerca_ver"] += 1
-                                    st.success("✅ CONSEGNATA")
-                                    time.sleep(0.5)
-                                    st.rerun()
+                                if not st.session_state.get("can_consegna", False):
+                                    st.info("🔒 Non sei autorizzato alla consegna")
+                                else:
+                                    conferma_consegna = st.checkbox("Confermo la CONSEGNA", key=f"conf_{v['targa']}")
+                                    if st.button("🔴 CONSEGNA", key=f"btn_{v['targa']}", disabled=not conferma_consegna, use_container_width=True):
+                                        supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute()
+                                        registra_log(v['targa'], "Consegna", f"Uscita da {v['zona_attuale']}", utente_attivo)
+                                        
+                                        st.session_state["zona_id_sposta"] = ""
+                                        st.session_state["zona_nome_sposta"] = ""
+                                        st.session_state["ricerca_attiva"] = False
+                                        st.session_state["ricerca_query"] = None
+                                        st.session_state["ricerca_feedback_ok"] = False
+                                        st.session_state["form_ricerca_ver"] += 1
+                                        st.success("✅ CONSEGNATA")
+                                        time.sleep(0.5)
+                                        st.rerun()
 
     # --- 10. SEZIONE MODIFICA ---
     elif scelta == "✏️ Modifica":
@@ -332,8 +339,6 @@ else:
             val_m = q_mod if not q_mod.isdigit() else int(q_mod)
             res = supabase.table("parco_usato").select("*").eq(col_m, val_m).eq("stato", "PRESENTE").execute()
             if feedback_ricerca("Dato", q_mod, res.data):
-                
-                # Selezione in caso di risultati multipli
                 if len(res.data) > 1:
                     st.warning("⚠️ Più vetture trovate, seleziona quella da modificare")
                     opzioni = {f"{v['targa']} | {v['marca_modello']} | Chiave {v['numero_chiave']}": v for v in res.data}
@@ -517,12 +522,13 @@ else:
         res_all = supabase.table("utenti").select("*").order("nome").execute()
         if res_all.data:
             df_ut = pd.DataFrame(res_all.data)
-            st.dataframe(df_ut[["nome", "ruolo", "attivo"]], use_container_width=True)
+            st.dataframe(df_ut[["nome", "ruolo", "attivo", "can_consegna"]], use_container_width=True)
         with st.form("add_user"):
             st.markdown("### ➕ Aggiungi Utente")
             n = st.text_input("Nome e Cognome"); p = st.text_input("PIN", type="password"); r = st.selectbox("Ruolo", ["operatore", "admin"])
+            c_cons = st.checkbox("Autorizzato alla CONSEGNA")
             if st.form_submit_button("CREA"):
-                supabase.table("utenti").insert({"nome": n, "pin": p, "ruolo": r, "attivo": True}).execute()
+                supabase.table("utenti").insert({"nome": n, "pin": p, "ruolo": r, "attivo": True, "can_consegna": c_cons}).execute()
                 st.success("Creato"); time.sleep(1); st.rerun()
         st.markdown("---")
         st.markdown("### ✏️ Modifica / Disattiva Utente")
@@ -532,9 +538,10 @@ else:
         with st.form("edit_user"):
             new_pin = st.text_input("Nuovo PIN (lascia vuoto per non cambiare)", type="password")
             new_ruolo = st.selectbox("Ruolo", ["operatore", "admin"], index=0 if ut["ruolo"] == "operatore" else 1)
+            can_consegna = st.checkbox("🔴 Autorizzato alla CONSEGNA", value=ut.get("can_consegna", False))
             attivo = st.checkbox("Utente attivo", value=ut["attivo"])
             if st.form_submit_button("SALVA MODIFICHE"):
-                upd = {"ruolo": new_ruolo, "attivo": attivo}
+                upd = {"ruolo": new_ruolo, "attivo": attivo, "can_consegna": can_consegna}
                 if new_pin: upd["pin"] = new_pin
                 supabase.table("utenti").update(upd).eq("nome", u_sel).execute()
                 st.success("✅ Utente aggiornato"); time.sleep(1); st.rerun()
