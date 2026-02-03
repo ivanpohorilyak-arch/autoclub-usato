@@ -438,39 +438,34 @@ else:
                 df.to_excel(writer, index=False, sheet_name="Piazzale")
             st.download_button("📥 SCARICA EXCEL", out.getvalue(), "Piazzale.xlsx", use_container_width=True)
 
-    # --- 13. VERIFICA ZONE ---
     elif scelta == "📋 Verifica Zone":
-        st.subheader("📋 Analisi per Zona")
+    st.subheader("📋 Analisi per Zona")
 
-        z_v = st.selectbox(
-            "Scegli Zona",
-            list(ZONE_INFO.keys()),
-            format_func=lambda x: f"{x} - {ZONE_INFO[x]}"
-        )
+    z_v = st.selectbox(
+        "Scegli Zona",
+        list(ZONE_INFO.keys()),
+        format_func=lambda x: f"{x} - {ZONE_INFO[x]}"
+    )
 
-        res = supabase.table("parco_usato") \
-            .select("targa, marca_modello, colore") \
-            .eq("zona_id", z_v) \
-            .eq("stato", "PRESENTE") \
-            .execute()
+    res = supabase.table("parco_usato") \
+        .select("targa, marca_modello, colore") \
+        .eq("zona_id", z_v) \
+        .eq("stato", "PRESENTE") \
+        .execute()
 
-        totale_zona = len(res.data) if res.data else 0
+    totale_zona = len(res.data) if res.data else 0
 
-        # 🔢 KPI come Dashboard Generale (ma per zona)
-        st.metric(
-            label=f"🚗 Totale vetture in {ZONE_INFO[z_v]}",
-            value=totale_zona
-        )
+    st.metric(
+        label=f"🚗 Totale vetture in {ZONE_INFO[z_v]}",
+        value=totale_zona
+    )
 
-        st.markdown("---")
+    st.markdown("---")
 
-        if res.data:
-            st.dataframe(
-                pd.DataFrame(res.data),
-                use_container_width=True
-            )
-        else:
-            st.warning("Zona vuota")
+    if res.data:
+        st.dataframe(pd.DataFrame(res.data), use_container_width=True)
+    else:
+        st.warning("Zona vuota")
 
     # --- 14. SEZIONE LOG ---
     elif scelta == "📜 Log":
