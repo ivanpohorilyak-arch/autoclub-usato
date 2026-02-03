@@ -341,7 +341,10 @@ else:
                     if log.data:
                         df_log = pd.DataFrame(log.data)
                         df_log["Ora"] = pd.to_datetime(df_log["created_at"]).dt.tz_convert("Europe/Rome").dt.strftime("%d/%m/%Y %H:%M")
-                        st.dataframe(df_log[["Ora", "azione", "utente", "dettaglio"]], use_container_width=True)
+                        df_log["note"] = v["note"] # Aggiunta note vettura attuale
+                        st.dataframe(df_log[["Ora", "azione", "utente", "dettaglio", "note"]], use_container_width=True)
+                    else:
+                        st.info("Nessuno storico disponibile")
 
                 st.markdown("---")
                 
@@ -367,7 +370,7 @@ else:
                                     nuova_nota = v["note"] or ""
                                     if nota_spost: nuova_nota = f"{nuova_nota}\n[{datetime.now().strftime('%d/%m %H:%M')}] {nota_spost}"
                                     supabase.table("parco_usato").update({"zona_id": z_id, "zona_attuale": ZONE_INFO[z_id], "note": nuova_nota}).eq("targa", v["targa"]).execute()
-                                    registra_log(v["targa"], "Spostamento", f"In {ZONE_INFO[z_id]}", utente_attivo)
+                                    registra_log(v["targa"], "Spostamento", f"In {ZONE_INFO[z_id]} | Nota: {nota_spost}" if nota_spost else f"In {ZONE_INFO[z_id]}", utente_attivo)
                                     st.session_state["post_azione_msg"] = f"✅ Vettura spostata correttamente in **{ZONE_INFO[z_id]}**"
                                     reset_azione()
                                     st.rerun()
@@ -466,7 +469,7 @@ else:
         res = query.execute()
         if res.data:
             df = pd.DataFrame(res.data)
-            st.dataframe(df[["targa", "marca_modello", "colore", "zona_attuale", "numero_chiave"]], use_container_width=True)
+            st.dataframe(df[["targa", "marca_modello", "colore", "zona_attuale", "numero_chiave", "note"]], use_container_width=True)
             out = BytesIO()
             with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
                 df.to_excel(writer, index=False, sheet_name="Piazzale")
@@ -489,7 +492,14 @@ else:
         if res.data:
             df = pd.DataFrame(res.data)
             df["Ora"] = pd.to_datetime(df["created_at"]).dt.tz_convert("Europe/Rome").dt.strftime("%d/%m/%Y %H:%M:%S")
-            st.dataframe(df[["Ora", "targa", "azione", "utente", "dettaglio"]], use_container_width=True)
+            
+            # Arricchimento note da parco_usato
+            targhe = df["targa"].unique().tolist()
+            res_note = supabase.table("parco_usato").select("targa, note").in_("targa", targhe).execute()
+            note_map = {r["targa"]: r["note"] for r in (res_note.data or [])}
+            df["note"] = df["targa"].map(note_map)
+            
+            st.dataframe(df[["Ora", "targa", "azione", "utente", "dettaglio", "note"]], use_container_width=True)
 
     # --- 15. STAMPA QR ---
     elif scelta == "🖨️ Stampa QR":
