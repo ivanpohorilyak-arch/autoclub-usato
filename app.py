@@ -279,55 +279,91 @@ else:
                     st.session_state["ricerca_feedback_ok"] = ok
 
                 if st.session_state["ricerca_feedback_ok"]:
-                    for v in res.data:
-                        with st.expander(f"🚗 {v['targa']} - {v['marca_modello']}", expanded=True):
-                            st.write(f"📍 Posizione attuale: **{v['zona_attuale']}**")
-                            
-                            if not st.session_state.camera_attiva:
-                                st.warning("⚠️ Per spostare questa vettura, attiva lo **Scanner QR** nella Sidebar.")
-                            
-                            if st.session_state.camera_attiva:
-                                foto_sp = st.camera_input(f"Scanner QR Destinazione", key=f"cam_{v['targa']}")
-                                if foto_sp and not st.session_state["zona_id_sposta"]:
-                                    z_id_sp = leggi_qr_zona(foto_sp)
-                                    if z_id_sp:
-                                        st.session_state["zona_id_sposta"] = z_id_sp
-                                        st.session_state["zona_nome_sposta"] = ZONE_INFO[z_id_sp]
-                                        st.success(f"🎯 Destinazione rilevata: {st.session_state['zona_nome_sposta']}")
-                            
-                            c1, c2 = st.columns(2)
-                            if c1.button("SPOSTA QUI", key=f"b_{v['targa']}", disabled=not st.session_state['zona_id_sposta'], use_container_width=True):
-                                supabase.table("parco_usato").update({"zona_id": st.session_state["zona_id_sposta"], "zona_attuale": st.session_state["zona_nome_sposta"]}).eq("targa", v['targa']).execute()
-                                registra_log(v['targa'], "Spostamento", f"In {st.session_state['zona_nome_sposta']}", utente_attivo)
-                                
-                                st.session_state["zona_id_sposta"] = ""
-                                st.session_state["zona_nome_sposta"] = ""
-                                st.session_state["ricerca_attiva"] = False
-                                st.session_state["ricerca_query"] = None
-                                st.session_state["ricerca_feedback_ok"] = False
-                                st.session_state["form_ricerca_ver"] += 1
-                                st.success("✅ Spostata!")
-                                time.sleep(0.5)
-                                st.rerun()
-                            
-                            with c2:
-                                if not st.session_state.get("can_consegna", False):
-                                    st.info("🔒 Non sei autorizzato alla consegna")
-                                else:
-                                    conferma_consegna = st.checkbox("Confermo la CONSEGNA", key=f"conf_{v['targa']}")
-                                    if st.button("🔴 CONSEGNA", key=f"btn_{v['targa']}", disabled=not conferma_consegna, use_container_width=True):
-                                        supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute()
-                                        registra_log(v['targa'], "Consegna", f"Uscita da {v['zona_attuale']}", utente_attivo)
-                                        
-                                        st.session_state["zona_id_sposta"] = ""
-                                        st.session_state["zona_nome_sposta"] = ""
-                                        st.session_state["ricerca_attiva"] = False
-                                        st.session_state["ricerca_query"] = None
-                                        st.session_state["ricerca_feedback_ok"] = False
-                                        st.session_state["form_ricerca_ver"] += 1
-                                        st.success("✅ CONSEGNATA")
-                                        time.sleep(0.5)
-                                        st.rerun()
+                    # --- SE PIÙ RISULTATI: COMBOBOX COME IN MODIFICA ---
+                    if len(res.data) > 1:
+                        st.warning("⚠️ Più vetture trovate, seleziona quella da spostare")
+                        opzioni = {
+                            f"{v['targa']} | {v['marca_modello']} | Chiave {v['numero_chiave']}": v
+                            for v in res.data
+                        }
+                        scelta_v = st.selectbox("Scegli vettura da spostare", list(opzioni.keys()))
+                        v = opzioni[scelta_v]
+                    else:
+                        v = res.data[0]
+
+                    with st.expander(f"🚗 {v['targa']} - {v['marca_modello']}", expanded=True):
+                        st.write(f"📍 Posizione attuale: **{v['zona_attuale']}**")
+
+                        # 📝 NOTE SPOSTAMENTO
+                        nota_spostamento = st.text_area(
+                            "📝 Note spostamento (opzionale)",
+                            placeholder="Inserisci eventuali informazioni prima dello spostamento"
+                        )
+
+                        if not st.session_state.camera_attiva:
+                            st.warning("⚠️ Per spostare questa vettura, attiva lo **Scanner QR** nella Sidebar.")
+
+                        if st.session_state.camera_attiva:
+                            foto_sp = st.camera_input(
+                                "Scanner QR Destinazione",
+                                key=f"cam_{v['targa']}"
+                            )
+                            if foto_sp and not st.session_state["zona_id_sposta"]:
+                                z_id_sp = leggi_qr_zona(foto_sp)
+                                if z_id_sp:
+                                    st.session_state["zona_id_sposta"] = z_id_sp
+                                    st.session_state["zona_nome_sposta"] = ZONE_INFO[z_id_sp]
+                                    st.success(f"🎯 Destinazione rilevata: {st.session_state['zona_nome_sposta']}")
+
+                        c1, c2 = st.columns(2)
+
+                        # --- SPOSTAMENTO ---
+                        if c1.button(
+                            "SPOSTA QUI",
+                            disabled=not st.session_state['zona_id_sposta'],
+                            use_container_width=True
+                        ):
+                            supabase.table("parco_usato").update({
+                                "zona_id": st.session_state["zona_id_sposta"],
+                                "zona_attuale": st.session_state["zona_nome_sposta"]
+                            }).eq("targa", v['targa']).execute()
+
+                            dettaglio = f"In {st.session_state['zona_nome_sposta']}"
+                            if nota_spostamento:
+                                dettaglio += f" | NOTE: {nota_spostamento}"
+
+                            registra_log(v['targa'], "Spostamento", dettaglio, utente_attivo)
+
+                            # reset stato
+                            st.session_state["zona_id_sposta"] = ""
+                            st.session_state["zona_nome_sposta"] = ""
+                            st.session_state["ricerca_attiva"] = False
+                            st.session_state["ricerca_query"] = None
+                            st.session_state["ricerca_feedback_ok"] = False
+                            st.session_state["form_ricerca_ver"] += 1
+
+                            st.success("✅ Spostata!")
+                            time.sleep(0.5)
+                            st.rerun()
+
+                        with c2:
+                            if not st.session_state.get("can_consegna", False):
+                                st.info("🔒 Non sei autorizzato alla consegna")
+                            else:
+                                conferma_consegna = st.checkbox("Confermo la CONSEGNA", key=f"conf_{v['targa']}")
+                                if st.button("🔴 CONSEGNA", key=f"btn_{v['targa']}", disabled=not conferma_consegna, use_container_width=True):
+                                    supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute()
+                                    registra_log(v['targa'], "Consegna", f"Uscita da {v['zona_attuale']}", utente_attivo)
+                                    
+                                    st.session_state["zona_id_sposta"] = ""
+                                    st.session_state["zona_nome_sposta"] = ""
+                                    st.session_state["ricerca_attiva"] = False
+                                    st.session_state["ricerca_query"] = None
+                                    st.session_state["ricerca_feedback_ok"] = False
+                                    st.session_state["form_ricerca_ver"] += 1
+                                    st.success("✅ CONSEGNATA")
+                                    time.sleep(0.5)
+                                    st.rerun()
 
     # --- 10. SEZIONE MODIFICA ---
     elif scelta == "✏️ Modifica":
