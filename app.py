@@ -62,6 +62,8 @@ if "form_ingresso_ver" not in st.session_state:
     st.session_state["form_ingresso_ver"] = 0
 if "azione_attiva" not in st.session_state:
     st.session_state["azione_attiva"] = None
+if "post_azione_msg" not in st.session_state:
+    st.session_state["post_azione_msg"] = None
 
 def aggiorna_attivita():
     st.session_state['last_action'] = datetime.now(timezone.utc)
@@ -137,7 +139,11 @@ def reset_ricerca():
     st.session_state["ricerca_risultati"] = []
     st.session_state["vettura_selezionata"] = None
     st.session_state["azione_attiva"] = None
-    # Reset widget state keys in modo sicuro per evitare StreamlitAPIException
+    for k in ["chk_spost", "chk_mod", "chk_cons"]:
+        st.session_state.pop(k, None)
+
+def reset_azione():
+    st.session_state["azione_attiva"] = None
     for k in ["chk_spost", "chk_mod", "chk_cons"]:
         st.session_state.pop(k, None)
 
@@ -277,6 +283,15 @@ else:
         aggiorna_attivita()
         st.subheader("🔍 Ricerca Vettura")
 
+        if st.session_state.get("post_azione_msg"):
+            st.success(st.session_state["post_azione_msg"])
+            st.markdown("### ✅ Operazione completata")
+            if st.button("🔍 Torna alla ricerca", use_container_width=True):
+                st.session_state["post_azione_msg"] = None
+                reset_ricerca()
+                st.rerun()
+            st.stop()
+
         with st.form("f_ricerca_unica"):
             tipo = st.radio("Cerca per:", ["Targa", "Numero Chiave"], horizontal=True)
             q = st.text_input("Valore da cercare").strip().upper()
@@ -330,14 +345,11 @@ else:
 
                 st.markdown("---")
                 
-                # --- AZIONI CON MUTUA ESCLUSIONE ---
                 col_a, col_b, col_c = st.columns(3)
-                
                 abilita_spost = col_a.checkbox("🔄 Spostamento", key="chk_spost", on_change=cb_spost)
                 abilita_mod = col_b.checkbox("✏️ Modifica", key="chk_mod", on_change=cb_mod)
                 abilita_consegna = col_c.checkbox("🔴 Consegna", key="chk_cons", on_change=cb_cons)
 
-                # 1. LOGICA SPOSTAMENTO
                 if st.session_state["azione_attiva"] == "spost":
                     if not st.session_state.camera_attiva:
                         st.warning("📷 Per spostare la vettura devi **attivare lo Scanner QR** dalla sidebar")
@@ -356,12 +368,11 @@ else:
                                     if nota_spost: nuova_nota = f"{nuova_nota}\n[{datetime.now().strftime('%d/%m %H:%M')}] {nota_spost}"
                                     supabase.table("parco_usato").update({"zona_id": z_id, "zona_attuale": ZONE_INFO[z_id], "note": nuova_nota}).eq("targa", v["targa"]).execute()
                                     registra_log(v["targa"], "Spostamento", f"In {ZONE_INFO[z_id]}", utente_attivo)
-                                    st.success("✅ Vettura spostata correttamente")
-                                    reset_ricerca()
-                                    time.sleep(0.5); st.rerun()
+                                    st.session_state["post_azione_msg"] = f"✅ Vettura spostata correttamente in **{ZONE_INFO[z_id]}**"
+                                    reset_azione()
+                                    st.rerun()
                             else: st.error("❌ QR non valido")
 
-                # 2. LOGICA MODIFICA
                 elif st.session_state["azione_attiva"] == "mod":
                     with st.form("f_mod_v"):
                         upd = {
@@ -374,11 +385,10 @@ else:
                         if st.form_submit_button("💾 SALVA MODIFICHE"):
                             supabase.table("parco_usato").update(upd).eq("targa", v["targa"]).execute()
                             registra_log(v["targa"], "Modifica", "Correzione dati", utente_attivo)
-                            st.success("✅ Dati aggiornati!")
-                            reset_ricerca()
-                            time.sleep(0.5); st.rerun()
+                            st.session_state["post_azione_msg"] = f"✅ Dati della vettura {v['targa']} aggiornati correttamente"
+                            reset_azione()
+                            st.rerun()
 
-                # 3. LOGICA CONSEGNA
                 elif st.session_state["azione_attiva"] == "cons":
                     if not st.session_state.can_consegna:
                         st.error("🔒 Non sei autorizzato alla CONSEGNA")
@@ -388,9 +398,9 @@ else:
                         if st.button("🔴 ESEGUI CONSEGNA", disabled=not conferma, use_container_width=True):
                             supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v["targa"]).execute()
                             registra_log(v["targa"], "Consegna", f"Uscita da {v['zona_attuale']}", utente_attivo)
-                            st.success("✅ Vettura CONSEGNATA correttamente")
-                            reset_ricerca()
-                            time.sleep(0.5); st.rerun()
+                            st.session_state["post_azione_msg"] = f"✅ Vettura {v['targa']} CONSEGNATA correttamente"
+                            reset_azione()
+                            st.rerun()
 
     # --- 11. DASHBOARD GENERALE ---
     elif scelta == "📊 Dashboard Generale":
