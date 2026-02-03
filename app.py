@@ -51,7 +51,7 @@ if 'camera_attiva' not in st.session_state:
 if "ingresso_salvato" not in st.session_state:
     st.session_state["ingresso_salvato"] = False
 
-# --- LOGICA DI PERSISTENZA RICERCA ---
+# --- LOGICA DI PERSISTENZA E MUTUA ESCLUSIONE ---
 if "ricerca_attiva" not in st.session_state:
     st.session_state["ricerca_attiva"] = False
 if "ricerca_risultati" not in st.session_state:
@@ -305,60 +305,46 @@ else:
 
                 st.markdown("---")
                 
-                # --- AZIONI CON MUTUA ESCLUSIONE SICURA ---
+                # --- AZIONI CON MUTUA ESCLUSIONE (FIXED) ---
                 col_a, col_b, col_c = st.columns(3)
                 
-                abilita_spost = col_a.checkbox(
-                    "🔄 Spostamento",
-                    value=st.session_state["azione_attiva"] == "spost",
-                    key="chk_spost",
-                    on_change=lambda: st.session_state.update({"azione_attiva": "spost"})
-                )
+                # Funzioni callback per la mutua esclusione senza crash
+                def cb_spost(): st.session_state["azione_attiva"] = "spost" if st.session_state.chk_spost else None
+                def cb_mod(): st.session_state["azione_attiva"] = "mod" if st.session_state.chk_mod else None
+                def cb_cons(): st.session_state["azione_attiva"] = "cons" if st.session_state.chk_cons else None
 
-                abilita_mod = col_b.checkbox(
-                    "✏️ Modifica",
-                    value=st.session_state["azione_attiva"] == "mod",
-                    key="chk_mod",
-                    on_change=lambda: st.session_state.update({"azione_attiva": "mod"})
-                )
+                abilita_spost = col_a.checkbox("🔄 Spostamento", key="chk_spost", value=(st.session_state["azione_attiva"] == "spost"), on_change=cb_spost)
+                abilita_mod = col_b.checkbox("✏️ Modifica", key="chk_mod", value=(st.session_state["azione_attiva"] == "mod"), on_change=cb_mod)
+                abilita_consegna = col_c.checkbox("🔴 Consegna", key="chk_cons", value=(st.session_state["azione_attiva"] == "cons"), on_change=cb_cons)
 
-                abilita_consegna = col_c.checkbox(
-                    "🔴 Consegna",
-                    value=st.session_state["azione_attiva"] == "cons",
-                    key="chk_cons",
-                    on_change=lambda: st.session_state.update({"azione_attiva": "cons"})
-                )
-
-                if abilita_spost:
+                # 1. LOGICA SPOSTAMENTO
+                if st.session_state["azione_attiva"] == "spost":
                     if not st.session_state.camera_attiva:
-                        st.warning("📷 Per spostare la vettura devi **attivare lo Scanner QR** dalla sidebar")
+                        st.warning("📷 Attiva lo Scanner QR nella sidebar per procedere")
                     else:
                         st.markdown("**📝 Note attuali:**")
                         st.info(v["note"] if v["note"] else "Nessuna nota presente")
-                        nota_spost = st.text_area("Nota per lo spostamento", key=f"nota_sp_{v['targa']}")
+                        nota_spost = st.text_area("Aggiungi una nota allo spostamento (opzionale)", key=f"nota_sp_{v['targa']}")
                         foto = st.camera_input("📷 Scanner QR Zona Destinazione", key=f"cam_sp_{v['targa']}")
                         
-                        zona_rilevata = None
-                        zona_nome_dest = None
+                        zona_rilevata_id = None
                         if foto:
                             z_id = leggi_qr_zona(foto)
                             if z_id:
-                                zona_rilevata = z_id
-                                zona_nome_dest = ZONE_INFO[z_id]
-                                st.success(f"🎯 Zona rilevata: **{zona_nome_dest}**")
+                                zona_rilevata_id = z_id
+                                st.success(f"🎯 Zona rilevata: **{ZONE_INFO[z_id]}**")
+                                if st.button(f"➡️ SPOSTA IN {ZONE_INFO[z_id]}", use_container_width=True):
+                                    nuova_nota = v["note"] or ""
+                                    if nota_spost: nuova_nota = f"{nuova_nota}\n[{datetime.now().strftime('%d/%m %H:%M')}] {nota_spost}"
+                                    supabase.table("parco_usato").update({"zona_id": z_id, "zona_attuale": ZONE_INFO[z_id], "note": nuova_nota}).eq("targa", v["targa"]).execute()
+                                    registra_log(v["targa"], "Spostamento", f"In {ZONE_INFO[z_id]}", utente_attivo)
+                                    st.success("✅ Vettura spostata!")
+                                    reset_ricerca()
+                                    time.sleep(0.5); st.rerun()
                             else: st.error("❌ QR non valido")
 
-                        if zona_rilevata:
-                            if st.button(f"➡️ SPOSTA IN {zona_nome_dest}", use_container_width=True):
-                                nuova_nota = v["note"] or ""
-                                if nota_spost: nuova_nota = f"{nuova_nota}\n[{datetime.now().strftime('%d/%m %H:%M')}] {nota_spost}"
-                                supabase.table("parco_usato").update({"zona_id": zona_rilevata, "zona_attuale": zona_nome_dest, "note": nuova_nota}).eq("targa", v["targa"]).execute()
-                                registra_log(v["targa"], "Spostamento", f"In {zona_nome_dest}", utente_attivo)
-                                st.success("✅ Vettura spostata correttamente")
-                                reset_ricerca()
-                                time.sleep(0.5); st.rerun()
-
-                if abilita_mod:
+                # 2. LOGICA MODIFICA
+                elif st.session_state["azione_attiva"] == "mod":
                     with st.form("f_mod_v"):
                         upd = {
                             "marca_modello": st.text_input("Marca / Modello", v["marca_modello"]).upper(),
@@ -374,12 +360,14 @@ else:
                             reset_ricerca()
                             time.sleep(0.5); st.rerun()
 
-                if abilita_consegna:
-                    if not st.session_state.can_consegna: st.error("🔒 Non sei autorizzato alla CONSEGNA")
+                # 3. LOGICA CONSEGNA
+                elif st.session_state["azione_attiva"] == "cons":
+                    if not st.session_state.can_consegna:
+                        st.error("🔒 Non sei autorizzato alla CONSEGNA")
                     else:
                         st.warning("⚠️ ATTENZIONE: la consegna è DEFINITIVA")
-                        conferma = st.checkbox(f"Confermo la CONSEGNA DEFINITIVA di {v['targa']}", key=f"conf_f_{v['targa']}")
-                        if st.button("🔴 CONFERMA CONSEGNA", disabled=not conferma, use_container_width=True):
+                        conferma = st.checkbox(f"Confermo la CONSEGNA DEFINITIVA della vettura {v['targa']}", key=f"conf_f_{v['targa']}")
+                        if st.button("🔴 ESEGUI CONSEGNA", disabled=not conferma, use_container_width=True):
                             supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v["targa"]).execute()
                             registra_log(v["targa"], "Consegna", f"Uscita da {v['zona_attuale']}", utente_attivo)
                             st.success("✅ Vettura CONSEGNATA correttamente")
@@ -426,6 +414,19 @@ else:
         k2.metric("➕ Ingressi", azioni.count("Ingresso"))
         k3.metric("🔄 Spostamenti", azioni.count("Spostamento"))
         k4.metric("🔴 Consegne", azioni.count("Consegna"))
+
+        st.markdown("---")
+        st.markdown("### 📍 KPI per Zona")
+        kpi_zona = []
+        for z_id, z_nome in ZONE_INFO.items():
+            z_in, z_sp, z_out = 0, 0, 0
+            for r in log_data:
+                if z_nome in (r.get("dettaglio") or ""):
+                    if r["azione"] == "Ingresso": z_in += 1
+                    elif r["azione"] == "Spostamento": z_sp += 1
+                    elif r["azione"] == "Consegna": z_out += 1
+            kpi_zona.append({"Zona": f"{z_id} - {z_nome}", "➕ Ingressi": z_in, "🔄 Spostamenti": z_sp, "🔴 Consegne": z_out})
+        st.dataframe(pd.DataFrame(kpi_zona), use_container_width=True)
 
     # --- 12. EXPORT ---
     elif scelta == "📊 Export":
