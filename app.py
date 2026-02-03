@@ -279,11 +279,11 @@ else:
                     st.session_state["ricerca_feedback_ok"] = ok
 
                 if st.session_state["ricerca_feedback_ok"]:
-                    # --- SE PIÙ RISULTATI: COMBOBOX COME IN MODIFICA ---
+                    # --- SOLUZIONE INDUSTRIALE PER RISULTATI MULTIPLI ---
                     if len(res.data) > 1:
                         st.warning("⚠️ Più vetture trovate, seleziona quella da spostare")
                         opzioni = {
-                            f"{v['targa']} | {v['marca_modello']} | Chiave {v['numero_chiave']}": v
+                            f"{v['targa']} | {v['marca_modello']} | Chiave {v['numero_chiave']} | ID {str(v['id'])[:8]}": v
                             for v in res.data
                         }
                         scelta_v = st.selectbox("Scegli vettura da spostare", list(opzioni.keys()))
@@ -297,7 +297,8 @@ else:
                         # 📝 NOTE SPOSTAMENTO
                         nota_spostamento = st.text_area(
                             "📝 Note spostamento (opzionale)",
-                            placeholder="Inserisci eventuali informazioni prima dello spostamento"
+                            placeholder="Inserisci eventuali informazioni prima dello spostamento",
+                            key=f"note_{v['id']}"
                         )
 
                         if not st.session_state.camera_attiva:
@@ -306,7 +307,7 @@ else:
                         if st.session_state.camera_attiva:
                             foto_sp = st.camera_input(
                                 "Scanner QR Destinazione",
-                                key=f"cam_{v['targa']}"
+                                key=f"cam_{v['id']}"
                             )
                             if foto_sp and not st.session_state["zona_id_sposta"]:
                                 z_id_sp = leggi_qr_zona(foto_sp)
@@ -320,13 +321,14 @@ else:
                         # --- SPOSTAMENTO ---
                         if c1.button(
                             "SPOSTA QUI",
+                            key=f"btn_sposta_{v['id']}",
                             disabled=not st.session_state['zona_id_sposta'],
                             use_container_width=True
                         ):
                             supabase.table("parco_usato").update({
                                 "zona_id": st.session_state["zona_id_sposta"],
                                 "zona_attuale": st.session_state["zona_nome_sposta"]
-                            }).eq("targa", v['targa']).execute()
+                            }).eq("id", v['id']).execute()
 
                             dettaglio = f"In {st.session_state['zona_nome_sposta']}"
                             if nota_spostamento:
@@ -350,9 +352,9 @@ else:
                             if not st.session_state.get("can_consegna", False):
                                 st.info("🔒 Non sei autorizzato alla consegna")
                             else:
-                                conferma_consegna = st.checkbox("Confermo la CONSEGNA", key=f"conf_{v['targa']}")
-                                if st.button("🔴 CONSEGNA", key=f"btn_{v['targa']}", disabled=not conferma_consegna, use_container_width=True):
-                                    supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute()
+                                conferma_consegna = st.checkbox("Confermo la CONSEGNA", key=f"conf_{v['id']}")
+                                if st.button("🔴 CONSEGNA", key=f"btn_cons_{v['id']}", disabled=not conferma_consegna, use_container_width=True):
+                                    supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("id", v['id']).execute()
                                     registra_log(v['targa'], "Consegna", f"Uscita da {v['zona_attuale']}", utente_attivo)
                                     
                                     st.session_state["zona_id_sposta"] = ""
@@ -377,7 +379,7 @@ else:
             if feedback_ricerca("Dato", q_mod, res.data):
                 if len(res.data) > 1:
                     st.warning("⚠️ Più vetture trovate, seleziona quella da modificare")
-                    opzioni = {f"{v['targa']} | {v['marca_modello']} | Chiave {v['numero_chiave']}": v for v in res.data}
+                    opzioni = {f"{v['targa']} | {v['marca_modello']} | Chiave {v['numero_chiave']} | ID {str(v['id'])[:8]}": v for v in res.data}
                     scelta_v = st.selectbox("Seleziona vettura", list(opzioni.keys()))
                     v = opzioni[scelta_v]
                 else:
@@ -392,7 +394,7 @@ else:
                         "note": st.text_area("Note", value=v['note'])
                     }
                     if st.form_submit_button("SALVA MODIFICHE"):
-                        supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute()
+                        supabase.table("parco_usato").update(upd).eq("id", v['id']).execute()
                         registra_log(v['targa'], "Modifica", "Correzione manuale", utente_attivo)
                         st.success("✅ Aggiornato"); time.sleep(1); st.rerun()
 
