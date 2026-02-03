@@ -432,7 +432,7 @@ else:
         res = query.execute()
         if res.data:
             df = pd.DataFrame(res.data)
-            st.dataframe(df"targa", "marca_modello", "colore", "zona_attuale", "numero_chiave", use_container_width=True)
+            st.dataframe(df[["targa", "marca_modello", "colore", "zona_attuale", "numero_chiave"]], use_container_width=True)
             out = BytesIO()
             with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
                 df.to_excel(writer, index=False, sheet_name="Piazzale")
@@ -503,7 +503,7 @@ else:
             df = pd.DataFrame(res.data)
             df["Ora"] = pd.to_datetime(df["created_at"]).dt.tz_convert("Europe/Rome").dt.strftime("%d/%m/%Y %H:%M:%S")
             df["Utente"] = df["utente"].apply(lambda u: u if u in utenti_attuali else f"{u} ⚠️")
-            df_view = df"Ora", "targa", "azione", "Utente", "dettaglio"
+            df_view = df[["Ora", "targa", "azione", "Utente", "dettaglio"]]
             st.caption(f"📌 Periodo selezionato: **{periodo}** — ⚠️ utenti rinominati o non più attivi")
             st.dataframe(df_view, use_container_width=True)
             out = BytesIO()
@@ -535,7 +535,7 @@ else:
         st.subheader("📍 Storico Zona")
         z_sel = st.selectbox("Zona", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}")
         res = supabase.table("log_movimenti").select("*").ilike("dettaglio", f"%{ZONE_INFO[z_sel]}%").limit(50).execute()
-        if res.data: st.dataframe(pd.DataFrame(res.data)"targa", "azione", "utente", use_container_width=True)
+        if res.data: st.dataframe(pd.DataFrame(res.data)[["targa", "azione", "utente"]], use_container_width=True)
 
     # --- 18. GESTIONE UTENTI (ADMIN ONLY) ---
     elif scelta == "👥 Gestione Utenti":
@@ -544,7 +544,7 @@ else:
         res_all = supabase.table("utenti").select("*").order("nome").execute()
         if res_all.data:
             df_ut = pd.DataFrame(res_all.data)
-            st.dataframe(df_ut"nome", "ruolo", "attivo", "can_consegna", use_container_width=True)
+            st.dataframe(df_ut[["nome", "ruolo", "attivo", "can_consegna"]], use_container_width=True)
         with st.form("add_user"):
             st.markdown("### ➕ Aggiungi Utente")
             n = st.text_input("Nome e Cognome"); p = st.text_input("PIN", type="password"); r = st.selectbox("Ruolo", ["operatore", "admin"])
