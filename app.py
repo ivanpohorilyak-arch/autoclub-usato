@@ -544,4 +544,10 @@ else:
                 upd = {"ruolo": new_ruolo, "attivo": attivo, "can_consegna": can_consegna}
                 if new_pin: upd["pin"] = new_pin
                 supabase.table("utenti").update(upd).eq("nome", u_sel).execute()
-                st.success("✅ Utente aggiornato"); time.sleep(1); st.rerun()
+
+    # 🔄 Aggiorna la sessione se l'utente modificato è quello loggato
+                if u_sel == st.session_state.get("user_autenticato"):
+        st.session_state["can_consegna"] = can_consegna
+        st.success("✅ Utente aggiornato")
+time.sleep(1)
+st.rerun()
