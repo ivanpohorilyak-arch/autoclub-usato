@@ -27,7 +27,8 @@ ZONE_INFO = {
     "Z01": "Deposito N.9", "Z02": "Deposito N.7", "Z03": "Deposito N.6 (Lavaggisti)",
     "Z04": "Deposito unificato 1 e 2", "Z05": "Showroom", "Z06": "Vetture vendute",
     "Z07": "Piazzale Lavaggio", "Z08": "Commercianti senza telo",
-    "Z09": "Commercianti con telo", "Z10": "Lavorazioni esterni", "Z11": "Verso altre sedi"
+    "Z09": "Commercianti con telo", "Z10": "Lavorazioni esterni", "Z11": "Verso altre sedi",
+    "Z12": "Deposito N.10", "Z13": "Deposito N.8","Z14": "Esterno (Con o Senza telo Motorsclub)" 
 }
 
 TIMEOUT_MINUTI = 20
