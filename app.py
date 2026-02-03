@@ -137,10 +137,9 @@ def reset_ricerca():
     st.session_state["ricerca_risultati"] = []
     st.session_state["vettura_selezionata"] = None
     st.session_state["azione_attiva"] = None
-    # Reset widget state keys per evitare flag rimasti spuntati al reset
-    if "chk_spost" in st.session_state: st.session_state["chk_spost"] = False
-    if "chk_mod" in st.session_state: st.session_state["chk_mod"] = False
-    if "chk_cons" in st.session_state: st.session_state["chk_cons"] = False
+    # Reset widget state keys in modo sicuro per evitare StreamlitAPIException
+    for k in ["chk_spost", "chk_mod", "chk_cons"]:
+        st.session_state.pop(k, None)
 
 # --- CALLBACK PER MUTUA ESCLUSIONE FLAG ---
 def cb_spost():
@@ -348,11 +347,9 @@ else:
                         nota_spost = st.text_area("Nota per lo spostamento (opzionale)", key=f"nota_sp_{v['targa']}")
                         foto = st.camera_input("📷 Scanner QR Zona Destinazione", key=f"cam_sp_{v['targa']}")
                         
-                        zona_rilevata_id = None
                         if foto:
                             z_id = leggi_qr_zona(foto)
                             if z_id:
-                                zona_rilevata_id = z_id
                                 st.success(f"🎯 Zona rilevata: **{ZONE_INFO[z_id]}**")
                                 if st.button(f"➡️ SPOSTA IN {ZONE_INFO[z_id]}", use_container_width=True):
                                     nuova_nota = v["note"] or ""
