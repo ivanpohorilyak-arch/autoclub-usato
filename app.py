@@ -341,7 +341,7 @@ else:
                     if log.data:
                         df_log = pd.DataFrame(log.data)
                         df_log["Ora"] = pd.to_datetime(df_log["created_at"]).dt.tz_convert("Europe/Rome").dt.strftime("%d/%m/%Y %H:%M")
-                        df_log["note"] = v["note"] # Aggiunta note vettura attuale
+                        df_log["note"] = v.get("note", "") or "" # Note attuali visibili nello storico
                         st.dataframe(df_log[["Ora", "azione", "utente", "dettaglio", "note"]], use_container_width=True)
                     else:
                         st.info("Nessuno storico disponibile")
@@ -469,6 +469,7 @@ else:
         res = query.execute()
         if res.data:
             df = pd.DataFrame(res.data)
+            # Mostra colonna note anche nel dataframe di anteprima export
             st.dataframe(df[["targa", "marca_modello", "colore", "zona_attuale", "numero_chiave", "note"]], use_container_width=True)
             out = BytesIO()
             with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
@@ -493,12 +494,14 @@ else:
             df = pd.DataFrame(res.data)
             df["Ora"] = pd.to_datetime(df["created_at"]).dt.tz_convert("Europe/Rome").dt.strftime("%d/%m/%Y %H:%M:%S")
             
-            # Arricchimento note da parco_usato
-            targhe = df["targa"].unique().tolist()
-            res_note = supabase.table("parco_usato").select("targa, note").in_("targa", targhe).execute()
-            note_map = {r["targa"]: r["note"] for r in (res_note.data or [])}
-            df["note"] = df["targa"].map(note_map)
-            
+            # --- AGGIUNTA NOTE SEMPRE PRESENTE ---
+            df["note"] = ""
+            targhe = df["targa"].dropna().unique().tolist()
+            if targhe:
+                res_note = supabase.table("parco_usato").select("targa, note").in_("targa", targhe).execute()
+                note_map = {r["targa"]: r.get("note", "") or "" for r in (res_note.data or [])}
+                df["note"] = df["targa"].map(note_map).fillna("")
+
             st.dataframe(df[["Ora", "targa", "azione", "utente", "dettaglio", "note"]], use_container_width=True)
 
     # --- 15. STAMPA QR ---
