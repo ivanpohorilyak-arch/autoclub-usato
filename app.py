@@ -279,93 +279,55 @@ else:
                     st.session_state["ricerca_feedback_ok"] = ok
 
                 if st.session_state["ricerca_feedback_ok"]:
-                    # --- SOLUZIONE INDUSTRIALE PER RISULTATI MULTIPLI ---
-                    if len(res.data) > 1:
-                        st.warning("⚠️ Più vetture trovate, seleziona quella da spostare")
-                        opzioni = {
-                            f"{v['targa']} | {v['marca_modello']} | Chiave {v['numero_chiave']} | ID {str(v['id'])[:8]}": v
-                            for v in res.data
-                        }
-                        scelta_v = st.selectbox("Scegli vettura da spostare", list(opzioni.keys()))
-                        v = opzioni[scelta_v]
-                    else:
-                        v = res.data[0]
-
-                    with st.expander(f"🚗 {v['targa']} - {v['marca_modello']}", expanded=True):
-                        st.write(f"📍 Posizione attuale: **{v['zona_attuale']}**")
-
-                        # 📝 NOTE SPOSTAMENTO
-                        nota_spostamento = st.text_area(
-                            "📝 Note spostamento (opzionale)",
-                            placeholder="Inserisci eventuali informazioni prima dello spostamento",
-                            key=f"note_{v['id']}"
-                        )
-
-                        if not st.session_state.camera_attiva:
-                            st.warning("⚠️ Per spostare questa vettura, attiva lo **Scanner QR** nella Sidebar.")
-
-                        if st.session_state.camera_attiva:
-                            foto_sp = st.camera_input(
-                                "Scanner QR Destinazione",
-                                key=f"cam_{v['id']}"
-                            )
-                            if foto_sp and not st.session_state["zona_id_sposta"]:
-                                z_id_sp = leggi_qr_zona(foto_sp)
-                                if z_id_sp:
-                                    st.session_state["zona_id_sposta"] = z_id_sp
-                                    st.session_state["zona_nome_sposta"] = ZONE_INFO[z_id_sp]
-                                    st.success(f"🎯 Destinazione rilevata: {st.session_state['zona_nome_sposta']}")
-
-                        c1, c2 = st.columns(2)
-
-                        # --- SPOSTAMENTO ---
-                        if c1.button(
-                            "SPOSTA QUI",
-                            key=f"btn_sposta_{v['id']}",
-                            disabled=not st.session_state['zona_id_sposta'],
-                            use_container_width=True
-                        ):
-                            supabase.table("parco_usato").update({
-                                "zona_id": st.session_state["zona_id_sposta"],
-                                "zona_attuale": st.session_state["zona_nome_sposta"]
-                            }).eq("id", v['id']).execute()
-
-                            dettaglio = f"In {st.session_state['zona_nome_sposta']}"
-                            if nota_spostamento:
-                                dettaglio += f" | NOTE: {nota_spostamento}"
-
-                            registra_log(v['targa'], "Spostamento", dettaglio, utente_attivo)
-
-                            # reset stato
-                            st.session_state["zona_id_sposta"] = ""
-                            st.session_state["zona_nome_sposta"] = ""
-                            st.session_state["ricerca_attiva"] = False
-                            st.session_state["ricerca_query"] = None
-                            st.session_state["ricerca_feedback_ok"] = False
-                            st.session_state["form_ricerca_ver"] += 1
-
-                            st.success("✅ Spostata!")
-                            time.sleep(0.5)
-                            st.rerun()
-
-                        with c2:
-                            if not st.session_state.get("can_consegna", False):
-                                st.info("🔒 Non sei autorizzato alla consegna")
-                            else:
-                                conferma_consegna = st.checkbox("Confermo la CONSEGNA", key=f"conf_{v['id']}")
-                                if st.button("🔴 CONSEGNA", key=f"btn_cons_{v['id']}", disabled=not conferma_consegna, use_container_width=True):
-                                    supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("id", v['id']).execute()
-                                    registra_log(v['targa'], "Consegna", f"Uscita da {v['zona_attuale']}", utente_attivo)
-                                    
-                                    st.session_state["zona_id_sposta"] = ""
-                                    st.session_state["zona_nome_sposta"] = ""
-                                    st.session_state["ricerca_attiva"] = False
-                                    st.session_state["ricerca_query"] = None
-                                    st.session_state["ricerca_feedback_ok"] = False
-                                    st.session_state["form_ricerca_ver"] += 1
-                                    st.success("✅ CONSEGNATA")
-                                    time.sleep(0.5)
-                                    st.rerun()
+                    for v in res.data:
+                        with st.expander(f"🚗 {v['targa']} - {v['marca_modello']}", expanded=True):
+                            st.write(f"📍 Posizione attuale: **{v['zona_attuale']}**")
+                            
+                            if not st.session_state.camera_attiva:
+                                st.warning("⚠️ Per spostare questa vettura, attiva lo **Scanner QR** nella Sidebar.")
+                            
+                            if st.session_state.camera_attiva:
+                                foto_sp = st.camera_input(f"Scanner QR Destinazione", key=f"cam_{v['targa']}")
+                                if foto_sp and not st.session_state["zona_id_sposta"]:
+                                    z_id_sp = leggi_qr_zona(foto_sp)
+                                    if z_id_sp:
+                                        st.session_state["zona_id_sposta"] = z_id_sp
+                                        st.session_state["zona_nome_sposta"] = ZONE_INFO[z_id_sp]
+                                        st.success(f"🎯 Destinazione rilevata: {st.session_state['zona_nome_sposta']}")
+                            
+                            c1, c2 = st.columns(2)
+                            if c1.button("SPOSTA QUI", key=f"b_{v['targa']}", disabled=not st.session_state['zona_id_sposta'], use_container_width=True):
+                                supabase.table("parco_usato").update({"zona_id": st.session_state["zona_id_sposta"], "zona_attuale": st.session_state["zona_nome_sposta"]}).eq("targa", v['targa']).execute()
+                                registra_log(v['targa'], "Spostamento", f"In {st.session_state['zona_nome_sposta']}", utente_attivo)
+                                
+                                st.session_state["zona_id_sposta"] = ""
+                                st.session_state["zona_nome_sposta"] = ""
+                                st.session_state["ricerca_attiva"] = False
+                                st.session_state["ricerca_query"] = None
+                                st.session_state["ricerca_feedback_ok"] = False
+                                st.session_state["form_ricerca_ver"] += 1
+                                st.success("✅ Spostata!")
+                                time.sleep(0.5)
+                                st.rerun()
+                            
+                            with c2:
+                                if not st.session_state.get("can_consegna", False):
+                                    st.info("🔒 Non sei autorizzato alla consegna")
+                                else:
+                                    conferma_consegna = st.checkbox("Confermo la CONSEGNA", key=f"conf_{v['targa']}")
+                                    if st.button("🔴 CONSEGNA", key=f"btn_{v['targa']}", disabled=not conferma_consegna, use_container_width=True):
+                                        supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute()
+                                        registra_log(v['targa'], "Consegna", f"Uscita da {v['zona_attuale']}", utente_attivo)
+                                        
+                                        st.session_state["zona_id_sposta"] = ""
+                                        st.session_state["zona_nome_sposta"] = ""
+                                        st.session_state["ricerca_attiva"] = False
+                                        st.session_state["ricerca_query"] = None
+                                        st.session_state["ricerca_feedback_ok"] = False
+                                        st.session_state["form_ricerca_ver"] += 1
+                                        st.success("✅ CONSEGNATA")
+                                        time.sleep(0.5)
+                                        st.rerun()
 
     # --- 10. SEZIONE MODIFICA ---
     elif scelta == "✏️ Modifica":
@@ -379,7 +341,7 @@ else:
             if feedback_ricerca("Dato", q_mod, res.data):
                 if len(res.data) > 1:
                     st.warning("⚠️ Più vetture trovate, seleziona quella da modificare")
-                    opzioni = {f"{v['targa']} | {v['marca_modello']} | Chiave {v['numero_chiave']} | ID {str(v['id'])[:8]}": v for v in res.data}
+                    opzioni = {f"{v['targa']} | {v['marca_modello']} | Chiave {v['numero_chiave']}": v for v in res.data}
                     scelta_v = st.selectbox("Seleziona vettura", list(opzioni.keys()))
                     v = opzioni[scelta_v]
                 else:
@@ -394,7 +356,7 @@ else:
                         "note": st.text_area("Note", value=v['note'])
                     }
                     if st.form_submit_button("SALVA MODIFICHE"):
-                        supabase.table("parco_usato").update(upd).eq("id", v['id']).execute()
+                        supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute()
                         registra_log(v['targa'], "Modifica", "Correzione manuale", utente_attivo)
                         st.success("✅ Aggiornato"); time.sleep(1); st.rerun()
 
@@ -470,7 +432,7 @@ else:
         res = query.execute()
         if res.data:
             df = pd.DataFrame(res.data)
-            st.dataframe(df[["targa", "marca_modello", "colore", "zona_attuale", "numero_chiave"]], use_container_width=True)
+            st.dataframe(df"targa", "marca_modello", "colore", "zona_attuale", "numero_chiave", use_container_width=True)
             out = BytesIO()
             with pd.ExcelWriter(out, engine="xlsxwriter") as writer:
                 df.to_excel(writer, index=False, sheet_name="Piazzale")
@@ -541,7 +503,7 @@ else:
             df = pd.DataFrame(res.data)
             df["Ora"] = pd.to_datetime(df["created_at"]).dt.tz_convert("Europe/Rome").dt.strftime("%d/%m/%Y %H:%M:%S")
             df["Utente"] = df["utente"].apply(lambda u: u if u in utenti_attuali else f"{u} ⚠️")
-            df_view = df[["Ora", "targa", "azione", "Utente", "dettaglio"]]
+            df_view = df"Ora", "targa", "azione", "Utente", "dettaglio"
             st.caption(f"📌 Periodo selezionato: **{periodo}** — ⚠️ utenti rinominati o non più attivi")
             st.dataframe(df_view, use_container_width=True)
             out = BytesIO()
@@ -573,7 +535,7 @@ else:
         st.subheader("📍 Storico Zona")
         z_sel = st.selectbox("Zona", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}")
         res = supabase.table("log_movimenti").select("*").ilike("dettaglio", f"%{ZONE_INFO[z_sel]}%").limit(50).execute()
-        if res.data: st.dataframe(pd.DataFrame(res.data)[["targa", "azione", "utente"]], use_container_width=True)
+        if res.data: st.dataframe(pd.DataFrame(res.data)"targa", "azione", "utente", use_container_width=True)
 
     # --- 18. GESTIONE UTENTI (ADMIN ONLY) ---
     elif scelta == "👥 Gestione Utenti":
@@ -582,7 +544,7 @@ else:
         res_all = supabase.table("utenti").select("*").order("nome").execute()
         if res_all.data:
             df_ut = pd.DataFrame(res_all.data)
-            st.dataframe(df_ut[["nome", "ruolo", "attivo", "can_consegna"]], use_container_width=True)
+            st.dataframe(df_ut"nome", "ruolo", "attivo", "can_consegna", use_container_width=True)
         with st.form("add_user"):
             st.markdown("### ➕ Aggiungi Utente")
             n = st.text_input("Nome e Cognome"); p = st.text_input("PIN", type="password"); r = st.selectbox("Ruolo", ["operatore", "admin"])
