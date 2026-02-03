@@ -60,6 +60,8 @@ if "vettura_selezionata" not in st.session_state:
     st.session_state["vettura_selezionata"] = None
 if "form_ingresso_ver" not in st.session_state:
     st.session_state["form_ingresso_ver"] = 0
+if "azione_attiva" not in st.session_state:
+    st.session_state["azione_attiva"] = None
 
 def aggiorna_attivita():
     st.session_state['last_action'] = datetime.now(timezone.utc)
@@ -134,28 +136,13 @@ def reset_ricerca():
     st.session_state["ricerca_attiva"] = False
     st.session_state["ricerca_risultati"] = []
     st.session_state["vettura_selezionata"] = None
-    if "chk_spost" in st.session_state: st.session_state["chk_spost"] = False
-    if "chk_mod" in st.session_state: st.session_state["chk_mod"] = False
-    if "chk_cons" in st.session_state: st.session_state["chk_cons"] = False
-
-# --- CALLBACK PER MUTUA ESCLUSIONE AZIONI ---
-def solo_spostamento():
-    st.session_state["chk_mod"] = False
-    st.session_state["chk_cons"] = False
-
-def solo_modifica():
-    st.session_state["chk_spost"] = False
-    st.session_state["chk_cons"] = False
-
-def solo_consegna():
-    st.session_state["chk_spost"] = False
-    st.session_state["chk_mod"] = False
+    st.session_state["azione_attiva"] = None
 
 controllo_timeout()
 
 # --- 6. LOGIN & MENU PRINCIPALE ---
 if st.session_state['user_autenticato'] is None:
-    st.title("🔐 Accesso Autoclub Center Usato 1.1")
+    st.title("🔐 Accesso Autoclub Center Usato 1.1 Master")
     lista_u = get_lista_utenti_login()
     u = st.selectbox("Operatore", ["- Seleziona -"] + lista_u)
     p = st.text_input("PIN", type="password")
@@ -282,6 +269,7 @@ else:
                     st.session_state["ricerca_attiva"] = True
                     st.session_state["ricerca_risultati"] = res.data
                     st.session_state["vettura_selezionata"] = None
+                    st.session_state["azione_attiva"] = None
 
         if st.session_state["ricerca_attiva"]:
             risultati = st.session_state["ricerca_risultati"]
@@ -308,71 +296,68 @@ else:
                     st.write(f"**Numero Chiave:** {v['numero_chiave']}")
                     st.info(f"📍 **Zona Attuale:** {v['zona_attuale']}")
                 
-                # --- STORICO ---
                 with st.expander("📜 Visualizza Storico Movimenti"):
                     log = supabase.table("log_movimenti").select("*").eq("targa", v["targa"]).order("created_at", desc=True).execute()
                     if log.data:
                         df_log = pd.DataFrame(log.data)
                         df_log["Ora"] = pd.to_datetime(df_log["created_at"]).dt.tz_convert("Europe/Rome").dt.strftime("%d/%m/%Y %H:%M")
                         st.dataframe(df_log[["Ora", "azione", "utente", "dettaglio"]], use_container_width=True)
-                    else:
-                        st.info("Nessuno storico disponibile")
 
                 st.markdown("---")
                 
-                # --- AZIONI CON MUTUA ESCLUSIONE ---
+                # --- AZIONI CON MUTUA ESCLUSIONE SICURA ---
                 col_a, col_b, col_c = st.columns(3)
-                abilita_spost = col_a.checkbox("🔄 Spostamento", key="chk_spost", on_change=solo_spostamento)
-                abilita_mod = col_b.checkbox("✏️ Modifica", key="chk_mod", on_change=solo_modifica)
-                abilita_consegna = col_c.checkbox("🔴 Consegna", key="chk_cons", on_change=solo_consegna)
+                
+                abilita_spost = col_a.checkbox(
+                    "🔄 Spostamento",
+                    value=st.session_state["azione_attiva"] == "spost",
+                    key="chk_spost",
+                    on_change=lambda: st.session_state.update({"azione_attiva": "spost"})
+                )
 
-                # SPOSTAMENTO CON UX OTTIMIZZATA
+                abilita_mod = col_b.checkbox(
+                    "✏️ Modifica",
+                    value=st.session_state["azione_attiva"] == "mod",
+                    key="chk_mod",
+                    on_change=lambda: st.session_state.update({"azione_attiva": "mod"})
+                )
+
+                abilita_consegna = col_c.checkbox(
+                    "🔴 Consegna",
+                    value=st.session_state["azione_attiva"] == "cons",
+                    key="chk_cons",
+                    on_change=lambda: st.session_state.update({"azione_attiva": "cons"})
+                )
+
                 if abilita_spost:
                     if not st.session_state.camera_attiva:
                         st.warning("📷 Per spostare la vettura devi **attivare lo Scanner QR** dalla sidebar")
                     else:
                         st.markdown("**📝 Note attuali:**")
                         st.info(v["note"] if v["note"] else "Nessuna nota presente")
-
-                        nota_spost = st.text_area(
-                            "Nota per lo spostamento (opzionale)",
-                            placeholder="Es. spostata per lavaggio / preparazione / vendita",
-                            key=f"nota_sp_{v['targa']}"
-                        )
-
+                        nota_spost = st.text_area("Nota per lo spostamento", key=f"nota_sp_{v['targa']}")
                         foto = st.camera_input("📷 Scanner QR Zona Destinazione", key=f"cam_sp_{v['targa']}")
                         
                         zona_rilevata = None
                         zona_nome_dest = None
-
                         if foto:
                             z_id = leggi_qr_zona(foto)
                             if z_id:
                                 zona_rilevata = z_id
                                 zona_nome_dest = ZONE_INFO[z_id]
                                 st.success(f"🎯 Zona rilevata: **{zona_nome_dest}**")
-                            else:
-                                st.error("❌ QR non valido")
+                            else: st.error("❌ QR non valido")
 
                         if zona_rilevata:
-                            st.markdown("---")
                             if st.button(f"➡️ SPOSTA IN {zona_nome_dest}", use_container_width=True):
                                 nuova_nota = v["note"] or ""
-                                if nota_spost:
-                                    nuova_nota = f"{nuova_nota}\n[{datetime.now().strftime('%d/%m %H:%M')}] {nota_spost}"
-
-                                supabase.table("parco_usato").update({
-                                    "zona_id": zona_rilevata, 
-                                    "zona_attuale": zona_nome_dest,
-                                    "note": nuova_nota
-                                }).eq("targa", v["targa"]).execute()
-                                
-                                registra_log(v["targa"], "Spostamento", f"In {zona_nome_dest}" + (f" | Nota: {nota_spost}" if nota_spost else ""), utente_attivo)
+                                if nota_spost: nuova_nota = f"{nuova_nota}\n[{datetime.now().strftime('%d/%m %H:%M')}] {nota_spost}"
+                                supabase.table("parco_usato").update({"zona_id": zona_rilevata, "zona_attuale": zona_nome_dest, "note": nuova_nota}).eq("targa", v["targa"]).execute()
+                                registra_log(v["targa"], "Spostamento", f"In {zona_nome_dest}", utente_attivo)
                                 st.success("✅ Vettura spostata correttamente")
                                 reset_ricerca()
                                 time.sleep(0.5); st.rerun()
 
-                # MODIFICA
                 if abilita_mod:
                     with st.form("f_mod_v"):
                         upd = {
@@ -389,16 +374,11 @@ else:
                             reset_ricerca()
                             time.sleep(0.5); st.rerun()
 
-                # CONSEGNA BLINDATA
                 if abilita_consegna:
-                    if not st.session_state.can_consegna:
-                        st.error("🔒 Non sei autorizzato alla CONSEGNA")
+                    if not st.session_state.can_consegna: st.error("🔒 Non sei autorizzato alla CONSEGNA")
                     else:
                         st.warning("⚠️ ATTENZIONE: la consegna è DEFINITIVA")
-                        conferma = st.checkbox(
-                            f"Confermo la CONSEGNA DEFINITIVA della vettura {v['targa']}",
-                            key=f"chk_consegna_finale_{v['targa']}"
-                        )
+                        conferma = st.checkbox(f"Confermo la CONSEGNA DEFINITIVA di {v['targa']}", key=f"conf_f_{v['targa']}")
                         if st.button("🔴 CONFERMA CONSEGNA", disabled=not conferma, use_container_width=True):
                             supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v["targa"]).execute()
                             registra_log(v["targa"], "Consegna", f"Uscita da {v['zona_attuale']}", utente_attivo)
@@ -446,19 +426,6 @@ else:
         k2.metric("➕ Ingressi", azioni.count("Ingresso"))
         k3.metric("🔄 Spostamenti", azioni.count("Spostamento"))
         k4.metric("🔴 Consegne", azioni.count("Consegna"))
-
-        st.markdown("---")
-        st.markdown("### 📍 KPI per Zona")
-        kpi_zona = []
-        for z_id, z_nome in ZONE_INFO.items():
-            z_in, z_sp, z_out = 0, 0, 0
-            for r in log_data:
-                if z_nome in (r.get("dettaglio") or ""):
-                    if r["azione"] == "Ingresso": z_in += 1
-                    elif r["azione"] == "Spostamento": z_sp += 1
-                    elif r["azione"] == "Consegna": z_out += 1
-            kpi_zona.append({"Zona": f"{z_id} - {z_nome}", "➕ Ingressi": z_in, "🔄 Spostamenti": z_sp, "🔴 Consegne": z_out})
-        st.dataframe(pd.DataFrame(kpi_zona), use_container_width=True)
 
     # --- 12. EXPORT ---
     elif scelta == "📊 Export":
@@ -523,15 +490,11 @@ else:
     # --- 18. GESTIONE UTENTI (ADMIN ONLY) ---
     elif scelta == "👥 Gestione Utenti":
         st.subheader("👥 Gestione Utenti (Admin)")
-        if st.session_state["ruolo"] != "admin": 
-            st.error("Accesso non autorizzato")
-            st.stop()
-        
+        if st.session_state["ruolo"] != "admin": st.error("Accesso non autorizzato"); st.stop()
         res_all = supabase.table("utenti").select("*").order("nome").execute()
         if res_all.data:
             df_ut = pd.DataFrame(res_all.data)
             st.dataframe(df_ut[["nome", "ruolo", "attivo", "can_consegna"]], use_container_width=True)
-        
         col_ut1, col_ut2 = st.columns(2)
         with col_ut1:
             with st.form("add_user"):
@@ -544,7 +507,6 @@ else:
                     if n and p:
                         supabase.table("utenti").insert({"nome": n, "pin": p, "ruolo": r, "attivo": True, "can_consegna": c_cons}).execute()
                         st.success(f"✅ Creato"); time.sleep(1); st.rerun()
-        
         with col_ut2:
             if res_all.data:
                 st.markdown("### ✏️ Modifica / Disattiva")
@@ -559,6 +521,5 @@ else:
                         upd = {"ruolo": new_ruolo, "can_consegna": new_can_cons, "attivo": new_attivo}
                         if new_pin: upd["pin"] = new_pin
                         supabase.table("utenti").update(upd).eq("nome", u_sel_nome).execute()
-                        if u_sel_nome == st.session_state['user_autenticato']:
-                            st.session_state['can_consegna'] = new_can_cons
+                        if u_sel_nome == st.session_state['user_autenticato']: st.session_state['can_consegna'] = new_can_cons
                         st.success("✅ Aggiornato"); time.sleep(1); st.rerun()
