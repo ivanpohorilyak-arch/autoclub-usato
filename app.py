@@ -137,6 +137,32 @@ def reset_ricerca():
     st.session_state["ricerca_risultati"] = []
     st.session_state["vettura_selezionata"] = None
     st.session_state["azione_attiva"] = None
+    # Reset widget state keys per evitare flag rimasti spuntati al reset
+    if "chk_spost" in st.session_state: st.session_state["chk_spost"] = False
+    if "chk_mod" in st.session_state: st.session_state["chk_mod"] = False
+    if "chk_cons" in st.session_state: st.session_state["chk_cons"] = False
+
+# --- CALLBACK PER MUTUA ESCLUSIONE FLAG ---
+def cb_spost():
+    if st.session_state.chk_spost:
+        st.session_state["azione_attiva"] = "spost"
+        st.session_state["chk_mod"] = False
+        st.session_state["chk_cons"] = False
+    else: st.session_state["azione_attiva"] = None
+
+def cb_mod():
+    if st.session_state.chk_mod:
+        st.session_state["azione_attiva"] = "mod"
+        st.session_state["chk_spost"] = False
+        st.session_state["chk_cons"] = False
+    else: st.session_state["azione_attiva"] = None
+
+def cb_cons():
+    if st.session_state.chk_cons:
+        st.session_state["azione_attiva"] = "cons"
+        st.session_state["chk_spost"] = False
+        st.session_state["chk_mod"] = False
+    else: st.session_state["azione_attiva"] = None
 
 controllo_timeout()
 
@@ -305,26 +331,21 @@ else:
 
                 st.markdown("---")
                 
-                # --- AZIONI CON MUTUA ESCLUSIONE (FIXED) ---
+                # --- AZIONI CON MUTUA ESCLUSIONE ---
                 col_a, col_b, col_c = st.columns(3)
                 
-                # Funzioni callback per la mutua esclusione senza crash
-                def cb_spost(): st.session_state["azione_attiva"] = "spost" if st.session_state.chk_spost else None
-                def cb_mod(): st.session_state["azione_attiva"] = "mod" if st.session_state.chk_mod else None
-                def cb_cons(): st.session_state["azione_attiva"] = "cons" if st.session_state.chk_cons else None
-
-                abilita_spost = col_a.checkbox("🔄 Spostamento", key="chk_spost", value=(st.session_state["azione_attiva"] == "spost"), on_change=cb_spost)
-                abilita_mod = col_b.checkbox("✏️ Modifica", key="chk_mod", value=(st.session_state["azione_attiva"] == "mod"), on_change=cb_mod)
-                abilita_consegna = col_c.checkbox("🔴 Consegna", key="chk_cons", value=(st.session_state["azione_attiva"] == "cons"), on_change=cb_cons)
+                abilita_spost = col_a.checkbox("🔄 Spostamento", key="chk_spost", on_change=cb_spost)
+                abilita_mod = col_b.checkbox("✏️ Modifica", key="chk_mod", on_change=cb_mod)
+                abilita_consegna = col_c.checkbox("🔴 Consegna", key="chk_cons", on_change=cb_cons)
 
                 # 1. LOGICA SPOSTAMENTO
                 if st.session_state["azione_attiva"] == "spost":
                     if not st.session_state.camera_attiva:
-                        st.warning("📷 Attiva lo Scanner QR nella sidebar per procedere")
+                        st.warning("📷 Per spostare la vettura devi **attivare lo Scanner QR** dalla sidebar")
                     else:
                         st.markdown("**📝 Note attuali:**")
                         st.info(v["note"] if v["note"] else "Nessuna nota presente")
-                        nota_spost = st.text_area("Aggiungi una nota allo spostamento (opzionale)", key=f"nota_sp_{v['targa']}")
+                        nota_spost = st.text_area("Nota per lo spostamento (opzionale)", key=f"nota_sp_{v['targa']}")
                         foto = st.camera_input("📷 Scanner QR Zona Destinazione", key=f"cam_sp_{v['targa']}")
                         
                         zona_rilevata_id = None
@@ -338,7 +359,7 @@ else:
                                     if nota_spost: nuova_nota = f"{nuova_nota}\n[{datetime.now().strftime('%d/%m %H:%M')}] {nota_spost}"
                                     supabase.table("parco_usato").update({"zona_id": z_id, "zona_attuale": ZONE_INFO[z_id], "note": nuova_nota}).eq("targa", v["targa"]).execute()
                                     registra_log(v["targa"], "Spostamento", f"In {ZONE_INFO[z_id]}", utente_attivo)
-                                    st.success("✅ Vettura spostata!")
+                                    st.success("✅ Vettura spostata correttamente")
                                     reset_ricerca()
                                     time.sleep(0.5); st.rerun()
                             else: st.error("❌ QR non valido")
