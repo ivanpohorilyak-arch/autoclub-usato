@@ -134,6 +134,22 @@ def reset_ricerca():
     st.session_state["ricerca_attiva"] = False
     st.session_state["ricerca_risultati"] = []
     st.session_state["vettura_selezionata"] = None
+    if "chk_spost" in st.session_state: st.session_state["chk_spost"] = False
+    if "chk_mod" in st.session_state: st.session_state["chk_mod"] = False
+    if "chk_cons" in st.session_state: st.session_state["chk_cons"] = False
+
+# --- CALLBACK PER MUTUA ESCLUSIONE AZIONI ---
+def solo_spostamento():
+    st.session_state["chk_mod"] = False
+    st.session_state["chk_cons"] = False
+
+def solo_modifica():
+    st.session_state["chk_spost"] = False
+    st.session_state["chk_cons"] = False
+
+def solo_consegna():
+    st.session_state["chk_spost"] = False
+    st.session_state["chk_mod"] = False
 
 controllo_timeout()
 
@@ -304,11 +320,11 @@ else:
 
                 st.markdown("---")
                 
-                # --- AZIONI ---
+                # --- AZIONI CON MUTUA ESCLUSIONE ---
                 col_a, col_b, col_c = st.columns(3)
-                abilita_spost = col_a.checkbox("🔄 Spostamento", key="chk_spost")
-                abilita_mod = col_b.checkbox("✏️ Modifica", key="chk_mod")
-                abilita_consegna = col_c.checkbox("🔴 Consegna", key="chk_cons")
+                abilita_spost = col_a.checkbox("🔄 Spostamento", key="chk_spost", on_change=solo_spostamento)
+                abilita_mod = col_b.checkbox("✏️ Modifica", key="chk_mod", on_change=solo_modifica)
+                abilita_consegna = col_c.checkbox("🔴 Consegna", key="chk_cons", on_change=solo_consegna)
 
                 # SPOSTAMENTO CON UX OTTIMIZZATA
                 if abilita_spost:
