@@ -293,13 +293,22 @@ else:
                 with c2: 
                     st.write(f"**Numero Chiave:** {v['numero_chiave']}") 
                     st.info(f"📍 **Zona Attuale:** {v['zona_attuale']}") 
+                
+                # --- VISUALIZZAZIONE STORICO CORRETTA ---
                 with st.expander("📜 Visualizza Storico Movimenti"): 
                     log = supabase.table("log_movimenti").select("*").eq("targa", v["targa"]).order("created_at", desc=True).execute() 
                     if log.data: 
                         df_log = pd.DataFrame(log.data) 
                         df_log["Ora"] = pd.to_datetime(df_log["created_at"]).dt.tz_convert("Europe/Rome").dt.strftime("%d/%m/%Y %H:%M") 
-                        # FIX: Mostra solo lo storico reale senza note retrodatate
-                        st.dataframe(df_log[["Ora", "azione", "utente", "dettaglio"]], use_container_width=True) 
+                        
+                        # FIX: Estrazione dinamica della nota SOLO per l'evento specifico
+                        def estrai_nota(d):
+                            if d and "Nota:" in d:
+                                return d.split("Nota:", 1)[1].strip()
+                            return ""
+                        
+                        df_log["Nota"] = df_log["dettaglio"].apply(estrai_nota)
+                        st.dataframe(df_log[["Ora", "azione", "utente", "dettaglio", "Nota"]], use_container_width=True) 
                     else: st.info("Nessuno storico disponibile") 
                 st.markdown("---") 
                 col_a, col_b, col_c = st.columns(3) 
@@ -320,7 +329,7 @@ else:
                                 if st.button(f"➡️ SPOSTA IN {ZONE_INFO[z_id]}", use_container_width=True): 
                                     nuova_nota = v["note"] or "" 
                                     if nota_spost: nuova_nota = f"{nuova_nota}\n[{datetime.now().strftime('%d/%m %H:%M')}] {nota_spost}" 
-                                    supabase.table("parco_usato").update({"zona_id": z_id, "zona_attuale": ZONE_INFO[z_id], "note": nuova_nota}).eq("targa", v["targa"]).execute() 
+                                    supabase.table("parco_usato").update({"zona_id": z_id, "zona_attuale": ZONE_INFO[z_id], "note": nuova_nota}).eq("targa", v['targa']).execute() 
                                     registra_log(v["targa"], "Spostamento", f"In {ZONE_INFO[z_id]} | Nota: {nota_spost}" if nota_spost else f"In {ZONE_INFO[z_id]}", utente_attivo) 
                                     st.session_state["post_azione_msg"] = f"✅ Vettura spostata correttamente in **{ZONE_INFO[z_id]}**" 
                                     reset_azione() 
@@ -328,9 +337,9 @@ else:
                             else: st.error("❌ QR non valido") 
                 elif st.session_state["azione_attiva"] == "mod": 
                     with st.form("f_mod_v"): 
-                        upd = { "marca_modello": st.text_input("Marca / Modello", v["marca_modello"]).upper(), "colore": st.text_input("Colore", v["colore"]).capitalize(), "km": st.number_input("KM", value=int(v["km"])), "numero_chiave": st.number_input("Chiave", value=int(v["numero_chiave"])), "note": st.text_area("Note", v["note"]) } 
+                        upd = { "marca_modello": st.text_input("Marca / Modello", v["marca_modello"]).upper(), "colore": st.text_input("Colore", v["colore"]).capitalize(), "km": st.number_input("KM", value=int(v['km'])), "numero_chiave": st.number_input("Chiave", value=int(v['numero_chiave'])), "note": st.text_area("Note", v["note"]) } 
                         if st.form_submit_button("💾 SALVA MODIFICHE"): 
-                            supabase.table("parco_usato").update(upd).eq("targa", v["targa"]).execute() 
+                            supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute() 
                             registra_log(v["targa"], "Modifica", "Correzione dati", utente_attivo) 
                             st.session_state["post_azione_msg"] = f"✅ Dati della vettura {v['targa']} aggiornati correttamente" 
                             reset_azione() 
@@ -341,7 +350,7 @@ else:
                         st.warning("⚠️ ATTENZIONE: la consegna è DEFINITIVA") 
                         conferma = st.checkbox(f"Confermo la CONSEGNA DEFINITIVA della vettura {v['targa']}", key=f"conf_f_{v['targa']}") 
                         if st.button("🔴 ESEGUI CONSEGNA", disabled=not conferma, use_container_width=True): 
-                            supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v["targa"]).execute() 
+                            supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute() 
                             registra_log(v["targa"], "Consegna", f"Uscita da {v['zona_attuale']}", utente_attivo) 
                             st.session_state["post_azione_msg"] = f"✅ Vettura {v['targa']} CONSEGNATA correttamente" 
                             reset_azione() 
@@ -411,14 +420,13 @@ else:
         if res.data: st.dataframe(pd.DataFrame(res.data), use_container_width=True) 
         else: st.warning("Zona vuota") 
 
-    # --- 14. SEZIONE LOG --- 
+    # --- 14. SEZIONE LOG (GENERALE) --- 
     elif scelta == "📜 Log": 
         st.subheader("📜 Registro Movimenti") 
         res = supabase.table("log_movimenti").select("*").order("created_at", desc=True).limit(500).execute() 
         if res.data: 
             df = pd.DataFrame(res.data) 
             df["Ora"] = pd.to_datetime(df["created_at"]).dt.tz_convert("Europe/Rome").dt.strftime("%d/%m/%Y %H:%M:%S") 
-            # FIX: Mostra solo lo storico autentico senza note spalmate
             st.dataframe(df[["Ora", "targa", "azione", "utente", "dettaglio"]], use_container_width=True) 
 
     # --- 15. STAMPA QR --- 
