@@ -97,15 +97,12 @@ def descrivi_modifiche(old, new):
         "marca_modello": "Marca/Modello",
         "colore": "Colore",
         "km": "KM",
-        "numero_chiave": "Chiave",
-        "note": "Note"
+        "numero_chiave": "Chiave"
     }
     modifiche = []
     for k, label in campi.items():
-        old_val = str(old.get(k, "")).strip()
-        new_val = str(new.get(k, "")).strip()
-        if old_val != new_val:
-            modifiche.append(f"{label} ({old_val} → {new_val})")
+        if str(old.get(k, "")).strip() != str(new.get(k, "")).strip():
+            modifiche.append(f"{label} ({old.get(k)} → {new.get(k)})")
     return ", ".join(modifiche)
 
 def feedback_ricerca(tipo, valore, risultati):
@@ -366,11 +363,14 @@ else:
                             supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute() 
                             
                             diff = descrivi_modifiche(v, upd)
-                            if diff:
+                            if diff and nota_mod.strip():
+                                dettaglio = f"Modificati: {diff} | Nota: {nota_mod.strip()}"
+                            elif diff:
                                 dettaglio = f"Modificati: {diff}"
-                                if nota_mod.strip(): dettaglio += f" | Nota: {nota_mod.strip()}"
+                            elif nota_mod.strip():
+                                dettaglio = f"Correzione dati | Nota: {nota_mod.strip()}"
                             else:
-                                dettaglio = f"Correzione dati | Nota: {nota_mod.strip()}" if nota_mod.strip() else "Correzione dati"
+                                dettaglio = "Correzione dati"
 
                             registra_log(v["targa"], "Modifica", dettaglio, utente_attivo) 
                             st.session_state["post_azione_msg"] = f"✅ Dati della vettura {v['targa']} aggiornati correttamente" 
