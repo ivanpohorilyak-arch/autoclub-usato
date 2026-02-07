@@ -33,7 +33,7 @@ ZONE_INFO = {
 
 TIMEOUT_MINUTI = 20
 
-st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.2", layout="wide")
+st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1 Master", layout="wide")
 
 # --- 3. GESTIONE SESSIONE ---
 if 'user_autenticato' not in st.session_state:
@@ -51,7 +51,6 @@ if 'camera_attiva' not in st.session_state:
 if "ingresso_salvato" not in st.session_state:
     st.session_state["ingresso_salvato"] = False 
 
-# --- LOGICA DI PERSISTENZA E MUTUA ESCLUSIONE ---
 if "ricerca_attiva" not in st.session_state:
     st.session_state["ricerca_attiva"] = False 
 if "ricerca_risultati" not in st.session_state:
@@ -93,6 +92,22 @@ def get_lista_utenti_login():
     except: return [] 
 
 # --- 5. FUNZIONI CORE ---
+def descrivi_modifiche(old, new):
+    campi = {
+        "marca_modello": "Marca/Modello",
+        "colore": "Colore",
+        "km": "KM",
+        "numero_chiave": "Chiave",
+        "note": "Note"
+    }
+    modifiche = []
+    for k, label in campi.items():
+        old_val = str(old.get(k, "")).strip()
+        new_val = str(new.get(k, "")).strip()
+        if old_val != new_val:
+            modifiche.append(f"{label} ({old_val} → {new_val})")
+    return ", ".join(modifiche)
+
 def feedback_ricerca(tipo, valore, risultati):
     if valore is None or valore == "": 
         st.info("⌨️ Inserisci un valore per iniziare la ricerca") 
@@ -173,7 +188,7 @@ controllo_timeout()
 
 # --- 6. LOGIN & MENU PRINCIPALE ---
 if st.session_state['user_autenticato'] is None:
-    st.title("🔐 Accesso Autoclub Center Usato 1.2") 
+    st.title("🔐 Accesso Autoclub Center Usato 1.1 Master") 
     lista_u = get_lista_utenti_login() 
     u = st.selectbox("Operatore", ["- Seleziona -"] + lista_u) 
     p = st.text_input("PIN", type="password") 
@@ -237,7 +252,9 @@ else:
                 if check.data: st.error("Targa già presente"); st.stop() 
                 payload = { "targa": targa, "marca_modello": f"{marca} {modello}", "colore": colore, "km": int(km), "numero_chiave": int(n_chiave), "zona_id": st.session_state["zona_id"], "zona_attuale": st.session_state["zona_nome"], "data_ingresso": datetime.now(timezone.utc).isoformat(), "note": note, "stato": "PRESENTE", "utente_ultimo_invio": utente_attivo } 
                 supabase.table("parco_usato").insert(payload).execute() 
-                registra_log(targa, "Ingresso", f"In {st.session_state['zona_nome']}", utente_attivo) 
+                
+                registra_log(targa, "Ingresso", f"In {st.session_state['zona_nome']} | Nota: {note}" if note else f"In {st.session_state['zona_nome']}", utente_attivo) 
+                
                 st.session_state["ingresso_salvato"] = { "targa": targa, "modello": f"{marca} {modello}", "colore": colore, "km": int(km), "chiave": int(n_chiave), "zona": st.session_state["zona_nome"] } 
                 st.rerun() 
         if st.session_state.get("ingresso_salvato"): 
@@ -294,14 +311,12 @@ else:
                     st.write(f"**Numero Chiave:** {v['numero_chiave']}") 
                     st.info(f"📍 **Zona Attuale:** {v['zona_attuale']}") 
                 
-                # --- VISUALIZZAZIONE STORICO CORRETTA ---
                 with st.expander("📜 Visualizza Storico Movimenti"): 
                     log = supabase.table("log_movimenti").select("*").eq("targa", v["targa"]).order("created_at", desc=True).execute() 
                     if log.data: 
                         df_log = pd.DataFrame(log.data) 
                         df_log["Ora"] = pd.to_datetime(df_log["created_at"]).dt.tz_convert("Europe/Rome").dt.strftime("%d/%m/%Y %H:%M") 
                         
-                        # FIX: Estrazione dinamica della nota SOLO per l'evento specifico
                         def estrai_nota(d):
                             if d and "Nota:" in d:
                                 return d.split("Nota:", 1)[1].strip()
@@ -330,17 +345,34 @@ else:
                                     nuova_nota = v["note"] or "" 
                                     if nota_spost: nuova_nota = f"{nuova_nota}\n[{datetime.now().strftime('%d/%m %H:%M')}] {nota_spost}" 
                                     supabase.table("parco_usato").update({"zona_id": z_id, "zona_attuale": ZONE_INFO[z_id], "note": nuova_nota}).eq("targa", v['targa']).execute() 
-                                    registra_log(v["targa"], "Spostamento", f"In {ZONE_INFO[z_id]} | Nota: {nota_spost}" if nota_spost else f"In {ZONE_INFO[z_id]}", utente_attivo) 
+                                    
+                                    registra_log(v["targa"], "Spostamento", f"In {ZONE_INFO[z_id]} | Nota: {nota_spost.strip()}" if nota_spost.strip() else f"In {ZONE_INFO[z_id]}", utente_attivo) 
+                                    
                                     st.session_state["post_azione_msg"] = f"✅ Vettura spostata correttamente in **{ZONE_INFO[z_id]}**" 
                                     reset_azione() 
                                     st.rerun() 
                             else: st.error("❌ QR non valido") 
                 elif st.session_state["azione_attiva"] == "mod": 
                     with st.form("f_mod_v"): 
-                        upd = { "marca_modello": st.text_input("Marca / Modello", v["marca_modello"]).upper(), "colore": st.text_input("Colore", v["colore"]).capitalize(), "km": st.number_input("KM", value=int(v['km'])), "numero_chiave": st.number_input("Chiave", value=int(v['numero_chiave'])), "note": st.text_area("Note", v["note"]) } 
+                        nota_mod = st.text_area("Note", v["note"])
+                        upd = { 
+                            "marca_modello": st.text_input("Marca / Modello", v["marca_modello"]).upper(), 
+                            "colore": st.text_input("Colore", v["colore"]).capitalize(), 
+                            "km": st.number_input("KM", value=int(v['km'])), 
+                            "numero_chiave": st.number_input("Chiave", value=int(v['numero_chiave'])), 
+                            "note": nota_mod 
+                        } 
                         if st.form_submit_button("💾 SALVA MODIFICHE"): 
                             supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute() 
-                            registra_log(v["targa"], "Modifica", "Correzione dati", utente_attivo) 
+                            
+                            diff = descrivi_modifiche(v, upd)
+                            if diff:
+                                dettaglio = f"Modificati: {diff}"
+                                if nota_mod.strip(): dettaglio += f" | Nota: {nota_mod.strip()}"
+                            else:
+                                dettaglio = f"Correzione dati | Nota: {nota_mod.strip()}" if nota_mod.strip() else "Correzione dati"
+
+                            registra_log(v["targa"], "Modifica", dettaglio, utente_attivo) 
                             st.session_state["post_azione_msg"] = f"✅ Dati della vettura {v['targa']} aggiornati correttamente" 
                             reset_azione() 
                             st.rerun() 
