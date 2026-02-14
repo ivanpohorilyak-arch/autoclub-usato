@@ -230,7 +230,7 @@ else:
     # --- 7. SIDEBAR --- 
     with st.sidebar: 
         st.info(f"👤 {utente_attivo} ({st.session_state['ruolo']})") 
-        st_autorefresh(interval=30000, key="presence_heartbeat") 
+        st.session_state['heartbeat'] = st_autorefresh(interval=30000, key="presence_heartbeat") 
         aggiorna_presenza(utente_attivo, st.session_state["pagina_attuale"]) 
         st.markdown("---") 
         st.markdown("### 📷 Scanner QR") 
@@ -254,8 +254,7 @@ else:
                     st.success(f"✅ Zona rilevata: {st.session_state['zona_nome']}") 
                 else: st.error("❌ QR non valido") 
 
-        # Tasto per auto-proposta chiave libera (fuori dal form)
-        if st.button("🔑 CERCA NUMERO CHIAVE LIBERO (1-520)", use_container_width=True):
+        if st.button("🔑 CALCOLA PRIMA CHIAVE LIBERA (1-520)", use_container_width=True):
             st.session_state["valore_chiave_proposta"] = trova_prima_chiave_libera()
             st.rerun()
 
@@ -269,7 +268,6 @@ else:
             colore = st.text_input("Colore").capitalize().strip() 
             km = st.number_input("Chilometri", min_value=0, step=100) 
             
-            # Campo numero chiave con proposta automatica
             n_chiave = st.number_input(
                 "N. Chiave (0 = Commerciante)", 
                 min_value=0, 
@@ -278,19 +276,27 @@ else:
                 step=1
             ) 
             
+            if n_chiave > 0:
+                check_preview = supabase.table("parco_usato") \
+                    .select("targa") \
+                    .eq("numero_chiave", int(n_chiave)) \
+                    .eq("stato", "PRESENTE") \
+                    .limit(1) \
+                    .execute()
+                if check_preview.data:
+                    st.warning(f"⚠️ Attenzione: chiave già usata da {check_preview.data[0]['targa']}")
+            
             note = st.text_area("Note") 
             submit = st.form_submit_button("REGISTRA LA VETTURA", disabled=not st.session_state['zona_id']) 
             
             if submit: 
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa): st.error("Targa non valida"); st.stop() 
                 
-                # Blocco Duplicati Targa
-                check_t = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute() 
+                check_t = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").limit(1).execute() 
                 if check_t.data: st.error("Targa già presente nel piazzale!"); st.stop() 
                 
-                # Blocco Duplicati Chiave (se diversa da 0)
                 if n_chiave > 0:
-                    check_k = supabase.table("parco_usato").select("targa").eq("numero_chiave", int(n_chiave)).eq("stato", "PRESENTE").execute()
+                    check_k = supabase.table("parco_usato").select("targa").eq("numero_chiave", int(n_chiave)).eq("stato", "PRESENTE").limit(1).execute()
                     if check_k.data: 
                         st.error(f"La chiave {n_chiave} è già occupata dalla vettura {check_k.data[0]['targa']}"); st.stop()
 
@@ -305,7 +311,6 @@ else:
                 registra_log(targa, "Ingresso", f"In {st.session_state['zona_nome']} | Nota: {note}" if note else f"In {st.session_state['zona_nome']}", utente_attivo) 
                 
                 st.session_state["ingresso_salvato"] = { "targa": targa, "modello": f"{marca} {modello}", "colore": colore, "km": int(km), "chiave": int(n_chiave), "zona": st.session_state["zona_nome"] } 
-                # Reset della proposta per l'ingresso successivo
                 st.session_state["valore_chiave_proposta"] = 0
                 st.rerun() 
                 
@@ -415,9 +420,8 @@ else:
                             "note": nota_mod 
                         } 
                         if st.form_submit_button("💾 SALVA MODIFICHE"): 
-                            # Controllo Duplicato Chiave in Modifica (se cambiata e > 0)
                             if int(upd["numero_chiave"]) > 0 and int(upd["numero_chiave"]) != v["numero_chiave"]:
-                                check_k = supabase.table("parco_usato").select("targa").eq("numero_chiave", int(upd["numero_chiave"])).eq("stato", "PRESENTE").execute()
+                                check_k = supabase.table("parco_usato").select("targa").eq("numero_chiave", int(upd["numero_chiave"])).eq("stato", "PRESENTE").limit(1).execute()
                                 if check_k.data: st.error(f"La chiave {upd['numero_chiave']} è già occupata"); st.stop()
 
                             supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute() 
