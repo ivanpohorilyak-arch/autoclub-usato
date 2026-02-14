@@ -79,7 +79,7 @@ def controllo_timeout():
 # --- 4. FUNZIONI LOGIN & DATABASE ---
 def login_db(nome, pin):
     try: 
-        res = supabase.table("utenti").select("nome, ruolo, can_consegna").eq("nome", name).eq("pin", pin).eq("attivo", True).limit(1).execute() 
+        res = supabase.table("utenti").select("nome, ruolo, can_consegna").eq("nome", nome).eq("pin", pin).eq("attivo", True).limit(1).execute() 
         return res.data[0] if res.data else None 
     except Exception as e: 
         st.error(f"Errore login: {e}") 
@@ -94,22 +94,17 @@ def get_lista_utenti_login():
 # --- 5. FUNZIONI CORE ---
 def trova_prima_chiave_libera():
     try:
-        res = supabase.table("parco_usato") \
-            .select("numero_chiave") \
-            .eq("stato", "PRESENTE") \
-            .execute()
-
+        res = supabase.table("parco_usato").select("numero_chiave").eq("stato", "PRESENTE").execute()
         occupate = set()
         if res.data:
             for r in res.data:
                 num = r.get("numero_chiave")
                 if num and 1 <= int(num) <= 520:
                     occupate.add(int(num))
-
         for i in range(1, 521):
             if i not in occupate:
                 return i
-        return 0 
+        return 0
     except:
         return 0
 
@@ -262,30 +257,35 @@ else:
             colore = st.text_input("Colore").capitalize().strip() 
             km = st.number_input("Chilometri", min_value=0, step=100) 
             
-            # --- AGGIUNTA LOGICA CHIAVE LIBERA ---
+            # --- BLOCCO GESTIONE CHIAVE LIBERA ---
             col_key1, col_key2 = st.columns([3,1])
             with col_key1:
                 n_chiave = st.number_input(
-                    "N. Chiave (0 = Commerciante)",
-                    min_value=0,
-                    max_value=520,
-                    step=1,
-                    value=0,
+                    "N. Chiave (0 = Commerciante)", 
+                    min_value=0, 
+                    max_value=520, 
+                    step=1, 
                     key="num_chiave_input"
                 )
             with col_key2:
-                if st.button("🔑 Auto", use_container_width=True):
-                    prima_libera = trova_prima_chiave_libera()
-                    st.session_state["num_chiave_input"] = prima_libera
+                st.write(" ") # Spaziatore
+                if st.form_submit_button("🔑 AUTO"):
+                    st.session_state["num_chiave_input"] = trova_prima_chiave_libera()
                     st.rerun()
             # -------------------------------------
-
+            
             note = st.text_area("Note") 
             submit = st.form_submit_button("REGISTRA LA VETTURA", disabled=not st.session_state['zona_id']) 
             if submit: 
                 if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', targa): st.error("Targa non valida"); st.stop() 
-                check = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute() 
-                if check.data: st.error("Targa già presente"); st.stop() 
+                check_t = supabase.table("parco_usato").select("targa").eq("targa", targa).eq("stato", "PRESENTE").execute() 
+                if check_t.data: st.error("Targa già presente"); st.stop() 
+                
+                # Controllo Duplicato Chiave (se diversa da 0)
+                if n_chiave > 0:
+                    check_k = supabase.table("parco_usato").select("targa").eq("numero_chiave", int(n_chiave)).eq("stato", "PRESENTE").execute()
+                    if check_k.data: st.error(f"La chiave {n_chiave} è già occupata dalla vettura {check_k.data[0]['targa']}"); st.stop()
+
                 payload = { "targa": targa, "marca_modello": f"{marca} {modello}", "colore": colore, "km": int(km), "numero_chiave": int(n_chiave), "zona_id": st.session_state["zona_id"], "zona_attuale": st.session_state["zona_nome"], "data_ingresso": datetime.now(timezone.utc).isoformat(), "note": note, "stato": "PRESENTE", "utente_ultimo_invio": utente_attivo } 
                 supabase.table("parco_usato").insert(payload).execute() 
                 
@@ -303,7 +303,7 @@ else:
                 st.session_state["form_ingresso_ver"] += 1 
                 st.rerun() 
 
-    # --- 9. SEZIONE RICERCA --- 
+    # --- 9. SEZIONE RICERCA (UNIFICATA E PERSISTENTE) --- 
     elif scelta == "🔍 Ricerca": 
         aggiorna_attivita() 
         st.subheader("🔍 Ricerca Vettura") 
@@ -399,6 +399,11 @@ else:
                             "note": nota_mod 
                         } 
                         if st.form_submit_button("💾 SALVA MODIFICHE"): 
+                            # Controllo Duplicato Chiave in Modifica
+                            if int(upd["numero_chiave"]) > 0 and int(upd["numero_chiave"]) != v["numero_chiave"]:
+                                check_k = supabase.table("parco_usato").select("targa").eq("numero_chiave", int(upd["numero_chiave"])).eq("stato", "PRESENTE").execute()
+                                if check_k.data: st.error(f"La chiave {upd['numero_chiave']} è già occupata"); st.stop()
+
                             supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute() 
                             
                             diff = descrivi_modifiche(v, upd)
