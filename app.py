@@ -254,7 +254,8 @@ else:
                     st.success(f"✅ Zona rilevata: {st.session_state['zona_nome']}") 
                 else: st.error("❌ QR non valido") 
 
-        if st.button("🔑 CALCOLA PRIMA CHIAVE LIBERA (1-520)", use_container_width=True):
+        # Tasto per auto-proposta chiave libera (fuori dal form)
+        if st.button("🔑 TROVA NUMERO CHIAVE LIBERO (1-520)", use_container_width=True):
             st.session_state["valore_chiave_proposta"] = trova_prima_chiave_libera()
             st.rerun()
 
@@ -268,6 +269,7 @@ else:
             colore = st.text_input("Colore").capitalize().strip() 
             km = st.number_input("Chilometri", min_value=0, step=100) 
             
+            # Campo numero chiave con proposta automatica
             n_chiave = st.number_input(
                 "N. Chiave (0 = Commerciante)", 
                 min_value=0, 
@@ -420,6 +422,7 @@ else:
                             "note": nota_mod 
                         } 
                         if st.form_submit_button("💾 SALVA MODIFICHE"): 
+                            # Controllo Duplicato Chiave in Modifica (se cambiata e > 0)
                             if int(upd["numero_chiave"]) > 0 and int(upd["numero_chiave"]) != v["numero_chiave"]:
                                 check_k = supabase.table("parco_usato").select("targa").eq("numero_chiave", int(upd["numero_chiave"])).eq("stato", "PRESENTE").limit(1).execute()
                                 if check_k.data: st.error(f"La chiave {upd['numero_chiave']} è già occupata"); st.stop()
@@ -446,7 +449,10 @@ else:
                         st.warning("⚠️ ATTENZIONE: la consegna è DEFINITIVA") 
                         conferma = st.checkbox(f"Confermo la CONSEGNA DEFINITIVA della vettura {v['targa']}", key=f"conf_f_{v['targa']}") 
                         if st.button("🔴 ESEGUI CONSEGNA", disabled=not conferma, use_container_width=True): 
-                            supabase.table("parco_usato").update({"stato": "CONSEGNATO"}).eq("targa", v['targa']).execute() 
+                            supabase.table("parco_usato").update({
+                                "stato": "CONSEGNATO",
+                                "numero_chiave": 0
+                            }).eq("targa", v['targa']).execute() 
                             registra_log(v["targa"], "Consegna", f"Uscita da {v['zona_attuale']}", utente_attivo) 
                             st.session_state["post_azione_msg"] = f"✅ Vettura {v['targa']} CONSEGNATA correttamente" 
                             reset_azione() 
@@ -490,6 +496,34 @@ else:
                     elif r["azione"] == "Consegna": z_out += 1 
             kpi_zona.append({"Zona": f"{z_id} - {z_nome}", "➕ Ingressi": z_in, "🔄 Spostamenti": z_sp, "🔴 Consegne": z_out}) 
         st.dataframe(pd.DataFrame(kpi_zona), use_container_width=True) 
+
+        # --- DASHBOARD OCCUPAZIONE CHIAVI ---
+        st.markdown("---")
+        st.markdown("### 🔑 Occupazione Chiavi 1–520")
+
+        res_chiavi = supabase.table("parco_usato") \
+            .select("numero_chiave") \
+            .eq("stato", "PRESENTE") \
+            .execute()
+
+        chiavi_occupate = set()
+        if res_chiavi.data:
+            for r in res_chiavi.data:
+                num = r.get("numero_chiave")
+                if num and 1 <= int(num) <= 520:
+                    chiavi_occupate.add(int(num))
+
+        totali = 520
+        occupate = len(chiavi_occupate)
+        libere = totali - occupate
+        percentuale = round((occupate / totali) * 100, 1)
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("🔒 Chiavi Occupate", occupate)
+        c2.metric("🟢 Chiavi Libere", libere)
+        c3.metric("📊 Percentuale Occupazione", f"{percentuale}%")
+
+        st.progress(percentuale / 100)
 
     # --- 12. EXPORT --- 
     elif scelta == "📊 Export": 
