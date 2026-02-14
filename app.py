@@ -79,7 +79,7 @@ def controllo_timeout():
 # --- 4. FUNZIONI LOGIN & DATABASE ---
 def login_db(nome, pin):
     try: 
-        res = supabase.table("utenti").select("nome, ruolo, can_consegna").eq("nome", nome).eq("pin", pin).eq("attivo", True).limit(1).execute() 
+        res = supabase.table("utenti").select("nome, ruolo, can_consegna").eq("nome", name).eq("pin", pin).eq("attivo", True).limit(1).execute() 
         return res.data[0] if res.data else None 
     except Exception as e: 
         st.error(f"Errore login: {e}") 
@@ -92,6 +92,27 @@ def get_lista_utenti_login():
     except: return [] 
 
 # --- 5. FUNZIONI CORE ---
+def trova_prima_chiave_libera():
+    try:
+        res = supabase.table("parco_usato") \
+            .select("numero_chiave") \
+            .eq("stato", "PRESENTE") \
+            .execute()
+
+        occupate = set()
+        if res.data:
+            for r in res.data:
+                num = r.get("numero_chiave")
+                if num and 1 <= int(num) <= 520:
+                    occupate.add(int(num))
+
+        for i in range(1, 521):
+            if i not in occupate:
+                return i
+        return 0 
+    except:
+        return 0
+
 def descrivi_modifiche(old, new):
     campi = {
         "marca_modello": "Marca/Modello",
@@ -240,7 +261,25 @@ else:
             modello = st.text_input("Modello").upper().strip() 
             colore = st.text_input("Colore").capitalize().strip() 
             km = st.number_input("Chilometri", min_value=0, step=100) 
-            n_chiave = st.number_input("N. Chiave", min_value=0, step=1) 
+            
+            # --- AGGIUNTA LOGICA CHIAVE LIBERA ---
+            col_key1, col_key2 = st.columns([3,1])
+            with col_key1:
+                n_chiave = st.number_input(
+                    "N. Chiave (0 = Commerciante)",
+                    min_value=0,
+                    max_value=520,
+                    step=1,
+                    value=0,
+                    key="num_chiave_input"
+                )
+            with col_key2:
+                if st.button("🔑 Auto", use_container_width=True):
+                    prima_libera = trova_prima_chiave_libera()
+                    st.session_state["num_chiave_input"] = prima_libera
+                    st.rerun()
+            # -------------------------------------
+
             note = st.text_area("Note") 
             submit = st.form_submit_button("REGISTRA LA VETTURA", disabled=not st.session_state['zona_id']) 
             if submit: 
@@ -264,7 +303,7 @@ else:
                 st.session_state["form_ingresso_ver"] += 1 
                 st.rerun() 
 
-    # --- 9. SEZIONE RICERCA (UNIFICATA E PERSISTENTE) --- 
+    # --- 9. SEZIONE RICERCA --- 
     elif scelta == "🔍 Ricerca": 
         aggiorna_attivita() 
         st.subheader("🔍 Ricerca Vettura") 
