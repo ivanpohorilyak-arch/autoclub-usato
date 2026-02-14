@@ -254,7 +254,7 @@ else:
                     st.success(f"✅ Zona rilevata: {st.session_state['zona_nome']}") 
                 else: st.error("❌ QR non valido") 
 
-        if st.button("🔑 CALCOLA PRIMA CHIAVE LIBERA (1-520)", use_container_width=True):
+        if st.button("🔑 TROVA NUMERO CHIAVE LIBERO (1-520)", use_container_width=True):
             st.session_state["valore_chiave_proposta"] = trova_prima_chiave_libera()
             st.rerun()
 
