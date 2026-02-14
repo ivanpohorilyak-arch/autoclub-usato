@@ -254,8 +254,7 @@ else:
                     st.success(f"✅ Zona rilevata: {st.session_state['zona_nome']}") 
                 else: st.error("❌ QR non valido") 
 
-        # Tasto per auto-proposta chiave libera (fuori dal form)
-        if st.button("🔑 TROVA NUMERO CHIAVE LIBERO (1-520)", use_container_width=True):
+        if st.button("🔑 CALCOLA PRIMA CHIAVE LIBERA (1-520)", use_container_width=True):
             st.session_state["valore_chiave_proposta"] = trova_prima_chiave_libera()
             st.rerun()
 
@@ -269,7 +268,6 @@ else:
             colore = st.text_input("Colore").capitalize().strip() 
             km = st.number_input("Chilometri", min_value=0, step=100) 
             
-            # Campo numero chiave con proposta automatica
             n_chiave = st.number_input(
                 "N. Chiave (0 = Commerciante)", 
                 min_value=0, 
@@ -422,7 +420,6 @@ else:
                             "note": nota_mod 
                         } 
                         if st.form_submit_button("💾 SALVA MODIFICHE"): 
-                            # Controllo Duplicato Chiave in Modifica (se cambiata e > 0)
                             if int(upd["numero_chiave"]) > 0 and int(upd["numero_chiave"]) != v["numero_chiave"]:
                                 check_k = supabase.table("parco_usato").select("targa").eq("numero_chiave", int(upd["numero_chiave"])).eq("stato", "PRESENTE").limit(1).execute()
                                 if check_k.data: st.error(f"La chiave {upd['numero_chiave']} è già occupata"); st.stop()
@@ -524,6 +521,47 @@ else:
         c3.metric("📊 Percentuale Occupazione", f"{percentuale}%")
 
         st.progress(percentuale / 100)
+
+        # --- CONTROLLO DUPLICATI CHIAVI ---
+        st.markdown("---")
+        st.markdown("### ⚠️ Controllo Chiavi Duplicate")
+
+        res_dup = supabase.table("parco_usato") \
+            .select("numero_chiave, targa") \
+            .eq("stato", "PRESENTE") \
+            .execute()
+
+        chiavi = {}
+        duplicati = []
+
+        if res_dup.data:
+            for r in res_dup.data:
+                num = r.get("numero_chiave")
+                if num and int(num) > 0:
+                    num = int(num)
+                    if num not in chiavi:
+                        chiavi[num] = [r["targa"]]
+                    else:
+                        chiavi[num].append(r["targa"])
+
+        for k, v_list in chiavi.items():
+            if len(v_list) > 1:
+                duplicati.append((k, v_list))
+
+        if duplicati:
+            st.error("❌ ATTENZIONE: Sono presenti chiavi duplicate nel sistema!")
+
+            df_dup = []
+            for d in duplicati:
+                df_dup.append({
+                    "Numero Chiave": d[0],
+                    "Targhe Coinvolte": ", ".join(d[1])
+                })
+
+            st.dataframe(pd.DataFrame(df_dup), use_container_width=True)
+
+        else:
+            st.success("✅ Nessuna chiave duplicata rilevata")
 
     # --- 12. EXPORT --- 
     elif scelta == "📊 Export": 
