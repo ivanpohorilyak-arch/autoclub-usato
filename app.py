@@ -255,7 +255,7 @@ else:
                 else: st.error("❌ QR non valido") 
 
         # Tasto per auto-proposta chiave libera (fuori dal form)
-        if st.button("🔑 CALCOLA PRIMA CHIAVE LIBERA (1-520)", use_container_width=True):
+        if st.button("🔑 CERCA NUMERO CHIAVE LIBERO (1-520)", use_container_width=True):
             st.session_state["valore_chiave_proposta"] = trova_prima_chiave_libera()
             st.rerun()
 
