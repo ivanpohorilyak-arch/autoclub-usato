@@ -276,15 +276,19 @@ else:
                 step=1
             ) 
             
+            # --- LOGICA INTELLIGENTE PREVIEW DUPLICATO ---
             if n_chiave > 0:
                 check_preview = supabase.table("parco_usato") \
                     .select("targa") \
                     .eq("numero_chiave", int(n_chiave)) \
                     .eq("stato", "PRESENTE") \
-                    .limit(1) \
                     .execute()
+
                 if check_preview.data:
-                    st.warning(f"⚠️ Attenzione: chiave già usata da {check_preview.data[0]['targa']}")
+                    targhe_presenti = [r["targa"] for r in check_preview.data]
+                    targhe_diverse = [t for t in targhe_presenti if t != targa]
+                    if targhe_diverse:
+                        st.warning(f"⚠️ Attenzione: chiave già usata da {', '.join(targhe_diverse)}")
             
             note = st.text_area("Note") 
             submit = st.form_submit_button("REGISTRA LA VETTURA", disabled=not st.session_state['zona_id']) 
