@@ -35,18 +35,23 @@ TIMEOUT_MINUTI = 20
 
 st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1 Master", layout="wide")
 
-# --- APPLICAZIONE TEMA NERO DEFINITIVA ---
+# --- APPLICAZIONE TEMA NERO DEFINITIVA (POTENZIATA PER iOS) ---
 st.markdown("""
 <style>
+    /* Forza schema colori scuro per browser mobile */
+    :root {
+        color-scheme: dark;
+    }
+
     /* Sfondo generale */
     .stApp {
-        background-color: #000000;
-        color: white;
+        background-color: #000000 !important;
+        color: white !important;
     }
 
     /* Sidebar */
     section[data-testid="stSidebar"] {
-        background-color: #111111;
+        background-color: #111111 !important;
     }
 
     /* Titoli e testi */
@@ -55,7 +60,7 @@ st.markdown("""
     }
 
     /* DATAFRAME DARK MODE VERO */
-    div[data-testid="stDataFrame"] {
+    div[data-testid="stDataFrame"], div[data-testid="stDataFrame"] > div {
         background-color: #111111 !important;
     }
 
@@ -82,6 +87,13 @@ st.markdown("""
     /* Metric */
     .stMetric {
         color: white !important;
+    }
+    
+    /* Input Fields per iOS */
+    .stTextInput input, .stNumberInput input, .stTextArea textarea {
+        background-color: #222222 !important;
+        color: white !important;
+        border: 1px solid #444444 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -327,6 +339,7 @@ else:
                 step=1
             ) 
             
+            # --- LOGICA INTELLIGENTE PREVIEW DUPLICATO ---
             if n_chiave > 0:
                 check_preview = supabase.table("parco_usato") \
                     .select("targa") \
@@ -626,7 +639,6 @@ else:
             .eq("stato", "PRESENTE") \
             .execute()
 
-        # UNA SOLA QUERY movimenti reali
         res_log_all = supabase.table("log_movimenti") \
             .select("targa, created_at, azione") \
             .in_("azione", ["Ingresso", "Spostamento"]) \
@@ -638,15 +650,10 @@ else:
             for r in res_log_all.data:
                 t = r.get("targa")
                 created = r.get("created_at")
-
-                if not t or not created:
-                    continue
-
+                if not t or not created: continue
                 try:
                     data = datetime.fromisoformat(created.replace("Z", "+00:00"))
-                except:
-                    continue
-
+                except: continue
                 if t not in ultimo_mov or data > ultimo_mov[t]:
                     ultimo_mov[t] = data
 
@@ -657,31 +664,24 @@ else:
             for v in res_ferme.data:
                 try:
                     ultima_data = ultimo_mov.get(v["targa"])
-
                     if not ultima_data:
                         ingresso = v.get("data_ingresso")
-                        if not ingresso:
-                            continue
+                        if not ingresso: continue
                         try:
                             ultima_data = datetime.fromisoformat(ingresso.replace("Z", "+00:00"))
-                        except:
-                            continue
-
+                        except: continue
                     giorni = (oggi - ultima_data).days
-
-                    if giorni >= 14:   # soglia minima
+                    if giorni >= 14:
                         lista_ferme.append({
                             "Targa": v["targa"],
                             "Modello": v["marca_modello"],
                             "Zona": v["zona_attuale"],
                             "Giorni inattiva": giorni
                         })
-                except:
-                    pass
+                except: pass
 
         if lista_ferme:
             df_ferme = pd.DataFrame(lista_ferme).sort_values("Giorni inattiva", ascending=False)
-
             oltre_14 = len(df_ferme[df_ferme["Giorni inattiva"] >= 14])
             oltre_30 = len(df_ferme[df_ferme["Giorni inattiva"] >= 30])
             oltre_60 = len(df_ferme[df_ferme["Giorni inattiva"] >= 60])
@@ -694,17 +694,11 @@ else:
             c4.metric("🚨 Oltre 90 giorni", oltre_90)
 
             def evidenzia(r):
-                if r["Giorni inattiva"] >= 90:
-                    return ['background-color: #ff4d4d']*4
-                elif r["Giorni inattiva"] >= 60:
-                    return ['background-color: #ffa500']*4
-                elif r["Giorni inattiva"] >= 30:
-                    return ['background-color: #ffff99']*4
-                else:
-                    return ['background-color: #d9edf7']*4  # 14-29
-
+                if r["Giorni inattiva"] >= 90: return ['background-color: #ff4d4d']*4
+                elif r["Giorni inattiva"] >= 60: return ['background-color: #ffa500']*4
+                elif r["Giorni inattiva"] >= 30: return ['background-color: #ffff99']*4
+                else: return ['background-color: #d9edf7']*4
             st.dataframe(df_ferme.style.apply(evidenzia, axis=1), use_container_width=True)
-
         else:
             st.success("✅ Nessuna vettura inattiva oltre 14 giorni")
 
