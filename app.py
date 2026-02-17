@@ -35,6 +35,32 @@ TIMEOUT_MINUTI = 20
 
 st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1 Master", layout="wide")
 
+# --- APPLICAZIONE TEMA NERO ---
+st.markdown("""
+    <style>
+        .stApp {
+            background-color: #000000;
+            color: white;
+        }
+
+        section[data-testid="stSidebar"] {
+            background-color: #111111;
+        }
+
+        h1, h2, h3, h4, h5, h6, label, p, span, div {
+            color: white !important;
+        }
+
+        .stDataFrame {
+            background-color: #111111;
+        }
+
+        .stMetric {
+            color: white;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 # --- 3. GESTIONE SESSIONE ---
 if 'user_autenticato' not in st.session_state:
     st.session_state['user_autenticato'] = None 
@@ -276,7 +302,6 @@ else:
                 step=1
             ) 
             
-            # --- LOGICA INTELLIGENTE PREVIEW DUPLICATO ---
             if n_chiave > 0:
                 check_preview = supabase.table("parco_usato") \
                     .select("targa") \
