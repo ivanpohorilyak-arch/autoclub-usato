@@ -35,15 +35,15 @@ TIMEOUT_MINUTI = 20
 
 st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1 Master", layout="wide")
 
-# --- APPLICAZIONE TEMA NERO DEFINITIVA (OTTIMIZZATA PER iOS/SAFARI) ---
+# --- APPLICAZIONE TEMA NERO DEFINITIVA (FIX TOTALE iOS & SAFARI) ---
 st.markdown("""
 <style>
-    /* Forza lo schema dark a livello di sistema operativo browser */
+    /* Forza schema colori scuro a livello browser */
     :root {
         color-scheme: dark;
     }
 
-    /* Sfondo principale */
+    /* Sfondo generale */
     .stApp {
         background-color: #000000 !important;
         color: #ffffff !important;
@@ -54,19 +54,25 @@ st.markdown("""
         background-color: #111111 !important;
     }
 
-    /* Input Fields, Selectbox e Textarea (Fix per iOS bianco) */
-    input, select, textarea, div[data-baseweb="select"], div[data-baseweb="input"] {
-        background-color: #1A1A1A !important;
-        color: #ffffff !important;
-        border: 1px solid #333333 !important;
-    }
-
-    /* Testi e Label */
+    /* Titoli e testi */
     h1, h2, h3, h4, h5, h6, label, p, span, div {
         color: #ffffff !important;
     }
 
-    /* DATAFRAME DARK MODE */
+    /* Fix visibilità Input, Selectbox e Dropdown su iOS (Safari) */
+    input, select, textarea, [data-baseweb="select"], [data-baseweb="input"], [role="combobox"] {
+        background-color: #1A1A1A !important;
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important; 
+        border: 1px solid #333333 !important;
+    }
+
+    /* Forza colore testi dentro i widget Streamlit */
+    div[data-testid="stSelectbox"] div, div[data-testid="stTextInput"] div, div[data-testid="stNumberInput"] div {
+        color: #ffffff !important;
+    }
+
+    /* DATAFRAME DARK MODE VERO */
     div[data-testid="stDataFrame"], div[data-testid="stDataFrame"] > div {
         background-color: #111111 !important;
     }
@@ -77,7 +83,7 @@ st.markdown("""
     }
 
     div[data-testid="stDataFrame"] th {
-        background-color: #222222 !important;
+        background-color: #1f1f1f !important;
         color: #ffffff !important;
     }
 
@@ -86,18 +92,22 @@ st.markdown("""
         color: #ffffff !important;
     }
 
-    /* Metric Card */
-    div[data-testid="stMetricValue"] > div {
+    /* Hover righe */
+    div[data-testid="stDataFrame"] tr:hover {
+        background-color: #222222 !important;
+    }
+
+    /* Metric */
+    .stMetric {
         color: #ffffff !important;
     }
-    
-    /* Bottone primario (opzionale: colore Center) */
+
+    /* Bottoni */
     .stButton > button {
         background-color: #222222 !important;
         color: white !important;
         border: 1px solid #444444 !important;
     }
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -601,7 +611,7 @@ else:
             .eq("stato", "PRESENTE") \
             .execute()
 
-        chiavi = {}
+        chiavi_map = {}
         duplicati = []
 
         if res_dup.data:
@@ -609,27 +619,21 @@ else:
                 num = r.get("numero_chiave")
                 if num and int(num) > 0:
                     num = int(num)
-                    if num not in chiavi:
-                        chiavi[num] = [r["targa"]]
+                    if num not in chiavi_map:
+                        chiavi_map[num] = [r["targa"]]
                     else:
-                        chiavi[num].append(r["targa"])
+                        chiavi_map[num].append(r["targa"])
 
-        for k, v_list in chiavi.items():
+        for k_num, v_list in chiavi_map.items():
             if len(v_list) > 1:
-                duplicati.append((k, v_list))
+                duplicati.append((k_num, v_list))
 
         if duplicati:
             st.error("❌ ATTENZIONE: Sono presenti chiavi duplicate nel sistema!")
-
             df_dup = []
             for d in duplicati:
-                df_dup.append({
-                    "Numero Chiave": d[0],
-                    "Targhe Coinvolte": ", ".join(d[1])
-                })
-
+                df_dup.append({"Numero Chiave": d[0], "Targhe Coinvolte": ", ".join(d[1])})
             st.dataframe(pd.DataFrame(df_dup), use_container_width=True)
-
         else:
             st.success("✅ Nessuna chiave duplicata rilevata")
 
@@ -642,6 +646,7 @@ else:
             .eq("stato", "PRESENTE") \
             .execute()
 
+        # UNA SOLA QUERY movimenti reali
         res_log_all = supabase.table("log_movimenti") \
             .select("targa, created_at, azione") \
             .in_("azione", ["Ingresso", "Spostamento"]) \
@@ -651,57 +656,69 @@ else:
 
         if res_log_all.data:
             for r in res_log_all.data:
-                t = r.get("targa")
+                t_targa = r.get("targa")
                 created = r.get("created_at")
-                if not t or not created: continue
-                try:
-                    data = datetime.fromisoformat(created.replace("Z", "+00:00"))
-                except: continue
-                if t not in ultimo_mov or data > ultimo_mov[t]:
-                    ultimo_mov[t] = data
 
-        oggi = datetime.now(timezone.utc)
+                if not t_targa or not created:
+                    continue
+
+                try:
+                    data_dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                except:
+                    continue
+
+                if t_targa not in ultimo_mov or data_dt > ultimo_mov[t_targa]:
+                    ultimo_mov[t_targa] = data_dt
+
+        oggi_dt = datetime.now(timezone.utc)
         lista_ferme = []
 
         if res_ferme.data:
-            for v in res_ferme.data:
+            for v_car in res_ferme.data:
                 try:
-                    ultima_data = ultimo_mov.get(v["targa"])
-                    if not ultima_data:
-                        ingresso = v.get("data_ingresso")
-                        if not ingresso: continue
+                    u_data = ultimo_mov.get(v_car["targa"])
+
+                    if not u_data:
+                        ingresso_str = v_car.get("data_ingresso")
+                        if not ingresso_str:
+                            continue
                         try:
-                            ultima_data = datetime.fromisoformat(ingresso.replace("Z", "+00:00"))
-                        except: continue
-                    giorni = (oggi - ultima_data).days
-                    if giorni >= 14:
+                            u_data = datetime.fromisoformat(ingresso_str.replace("Z", "+00:00"))
+                        except:
+                            continue
+
+                    gg_inattiva = (oggi_dt - u_data).days
+
+                    if gg_inattiva >= 14:
                         lista_ferme.append({
-                            "Targa": v["targa"],
-                            "Modello": v["marca_modello"],
-                            "Zona": v["zona_attuale"],
-                            "Giorni inattiva": giorni
+                            "Targa": v_car["targa"],
+                            "Modello": v_car["marca_modello"],
+                            "Zona": v_car["zona_attuale"],
+                            "Giorni inattiva": gg_inattiva
                         })
-                except: pass
+                except:
+                    pass
 
         if lista_ferme:
-            df_ferme = pd.DataFrame(lista_ferme).sort_values("Giorni inattiva", ascending=False)
-            oltre_14 = len(df_ferme[df_ferme["Giorni inattiva"] >= 14])
-            oltre_30 = len(df_ferme[df_ferme["Giorni inattiva"] >= 30])
-            oltre_60 = len(df_ferme[df_ferme["Giorni inattiva"] >= 60])
-            oltre_90 = len(df_ferme[df_ferme["Giorni inattiva"] >= 90])
+            df_ferme_v = pd.DataFrame(lista_ferme).sort_values("Giorni inattiva", ascending=False)
+            
+            c1_m, c2_m, c3_m, c4_m = st.columns(4)
+            c1_m.metric("🟡 Oltre 14 giorni", len(df_ferme_v))
+            c2_m.metric("⚠️ Oltre 30 giorni", len(df_ferme_v[df_ferme_v["Giorni inattiva"] >= 30]))
+            c3_m.metric("🔴 Oltre 60 giorni", len(df_ferme_v[df_ferme_v["Giorni inattiva"] >= 60]))
+            c4_m.metric("🚨 Oltre 90 giorni", len(df_ferme_v[df_ferme_v["Giorni inattiva"] >= 90]))
 
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("🟡 Oltre 14 giorni", oltre_14)
-            c2.metric("⚠️ Oltre 30 giorni", oltre_30)
-            c3.metric("🔴 Oltre 60 giorni", oltre_60)
-            c4.metric("🚨 Oltre 90 giorni", oltre_90)
+            def evidenzia_inattive(r):
+                if r["Giorni inattiva"] >= 90:
+                    return ['background-color: #ff4d4d']*4
+                elif r["Giorni inattiva"] >= 60:
+                    return ['background-color: #ffa500']*4
+                elif r["Giorni inattiva"] >= 30:
+                    return ['background-color: #ffff99']*4
+                else:
+                    return ['background-color: #d9edf7']*4
 
-            def evidenzia(r):
-                if r["Giorni inattiva"] >= 90: return ['background-color: #ff4d4d']*4
-                elif r["Giorni inattiva"] >= 60: return ['background-color: #ffa500']*4
-                elif r["Giorni inattiva"] >= 30: return ['background-color: #ffff99']*4
-                else: return ['background-color: #d9edf7']*4
-            st.dataframe(df_ferme.style.apply(evidenzia, axis=1), use_container_width=True)
+            st.dataframe(df_ferme_v.style.apply(evidenzia_inattive, axis=1), use_container_width=True)
         else:
             st.success("✅ Nessuna vettura inattiva oltre 14 giorni")
 
@@ -714,30 +731,30 @@ else:
         if zona_sel != "Tutte le zone": query = query.eq("zona_id", zona_sel) 
         res = query.execute() 
         if res.data: 
-            df = pd.DataFrame(res.data) 
-            st.dataframe(df[["targa", "marca_modello", "colore", "zona_attuale", "numero_chiave", "note"]], use_container_width=True) 
+            df_exp = pd.DataFrame(res.data) 
+            st.dataframe(df_exp[["targa", "marca_modello", "colore", "zona_attuale", "numero_chiave", "note"]], use_container_width=True) 
             out = BytesIO() 
-            with pd.ExcelWriter(out, engine="xlsxwriter") as writer: df.to_excel(writer, index=False, sheet_name="Piazzale") 
+            with pd.ExcelWriter(out, engine="xlsxwriter") as writer: df_exp.to_excel(writer, index=False, sheet_name="Piazzale") 
             st.download_button("📥 SCARICA EXCEL", out.getvalue(), "Piazzale.xlsx", use_container_width=True) 
 
     # --- 13. VERIFICA ZONE --- 
     elif scelta == "📋 Verifica Zone": 
         st.subheader("📋 Analisi per Zona") 
         z_v = st.selectbox("Scegli Zona", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}") 
-        res = supabase.table("parco_usato").select("targa, marca_modello, colore").eq("zona_id", z_v).eq("stato", "PRESENTE").execute() 
-        totale_zona = len(res.data) if res.data else 0 
+        res_z = supabase.table("parco_usato").select("targa, marca_modello, colore").eq("zona_id", z_v).eq("stato", "PRESENTE").execute() 
+        totale_zona = len(res_z.data) if res_z.data else 0 
         st.metric(label=f"🚗 Totale vetture in {ZONE_INFO[z_v]}", value=totale_zona) 
-        if res.data: st.dataframe(pd.DataFrame(res.data), use_container_width=True) 
+        if res_z.data: st.dataframe(pd.DataFrame(res_z.data), use_container_width=True) 
         else: st.warning("Zona vuota") 
 
     # --- 14. SEZIONE LOG (GENERALE) --- 
     elif scelta == "📜 Log": 
         st.subheader("📜 Registro Movimenti") 
-        res = supabase.table("log_movimenti").select("*").order("created_at", desc=True).limit(500).execute() 
-        if res.data: 
-            df = pd.DataFrame(res.data) 
-            df["Ora"] = pd.to_datetime(df["created_at"]).dt.tz_convert("Europe/Rome").dt.strftime("%d/%m/%Y %H:%M:%S") 
-            st.dataframe(df[["Ora", "targa", "azione", "utente", "dettaglio"]], use_container_width=True) 
+        res_l = supabase.table("log_movimenti").select("*").order("created_at", desc=True).limit(500).execute() 
+        if res_l.data: 
+            df_l = pd.DataFrame(res_l.data) 
+            df_l["Ora"] = pd.to_datetime(df_l["created_at"]).dt.tz_convert("Europe/Rome").dt.strftime("%d/%m/%Y %H:%M:%S") 
+            st.dataframe(df_l[["Ora", "targa", "azione", "utente", "dettaglio"]], use_container_width=True) 
 
     # --- 15. STAMPA QR --- 
     elif scelta == "🖨️ Stampa QR": 
@@ -761,10 +778,10 @@ else:
     elif scelta == "📊 Dashboard Zone": 
         st.subheader("📍 Storico Zona") 
         z_sel = st.selectbox("Zona", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}") 
-        res = supabase.table("log_movimenti").select("*").ilike("dettaglio", f"%{ZONE_INFO[z_sel]}%").limit(50).execute() 
-        if res.data: 
-            df_z = pd.DataFrame(res.data)
-            st.dataframe(df_z[["targa", "azione", "utente"]], use_container_width=True) 
+        res_dz = supabase.table("log_movimenti").select("*").ilike("dettaglio", f"%{ZONE_INFO[z_sel]}%").limit(50).execute() 
+        if res_dz.data: 
+            df_dz = pd.DataFrame(res_dz.data)
+            st.dataframe(df_dz[["targa", "azione", "utente"]], use_container_width=True) 
 
     # --- 18. GESTIONE UTENTI (ADMIN ONLY) --- 
     elif scelta == "👥 Gestione Utenti": 
@@ -778,13 +795,13 @@ else:
         with col_ut1: 
             with st.form("add_user"): 
                 st.markdown("### ➕ Aggiungi Nuovo") 
-                n = st.text_input("Nome e Cognome") 
-                p = st.text_input("PIN", type="password") 
-                r = st.selectbox("Ruolo", ["operatore", "admin"]) 
+                n_nome = st.text_input("Nome e Cognome") 
+                p_pin = st.text_input("PIN", type="password") 
+                r_ruolo = st.selectbox("Ruolo", ["operatore", "admin"]) 
                 c_cons = st.checkbox("Autorizzato alla CONSEGNA") 
                 if st.form_submit_button("CREA UTENTE"): 
-                    if n and p: 
-                        supabase.table("utenti").insert({"nome": n, "pin": p, "ruolo": r, "attivo": True, "can_consegna": c_cons}).execute() 
+                    if n_nome and p_pin: 
+                        supabase.table("utenti").insert({"nome": n_nome, "pin": p_pin, "ruolo": r_ruolo, "attivo": True, "can_consegna": c_cons}).execute() 
                         st.success(f"✅ Creato"); time.sleep(1); st.rerun() 
         with col_ut2: 
             if res_all.data: 
