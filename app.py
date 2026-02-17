@@ -567,6 +567,77 @@ else:
         else:
             st.success("✅ Nessuna chiave duplicata rilevata")
 
+        # --- CONTROLLO VETTURE FERME (ULTIMO MOVIMENTO REALE) ---
+        st.markdown("---")
+        st.markdown("### 🕒 Monitoraggio Vetture Inattive")
+
+        res_ferme = supabase.table("parco_usato") \
+            .select("targa, marca_modello, zona_attuale, data_ingresso") \
+            .eq("stato", "PRESENTE") \
+            .execute()
+
+        oggi = datetime.now(timezone.utc)
+        lista_ferme = []
+
+        if res_ferme.data:
+            for v in res_ferme.data:
+                try:
+                    # Cerca ultima movimentazione reale
+                    log_last = supabase.table("log_movimenti") \
+                        .select("created_at") \
+                        .eq("targa", v["targa"]) \
+                        .order("created_at", desc=True) \
+                        .limit(1) \
+                        .execute()
+
+                    if log_last.data:
+                        ultima_data = datetime.fromisoformat(
+                            log_last.data[0]["created_at"].replace("Z", "+00:00")
+                        )
+                    else:
+                        # fallback se non esiste log
+                        ultima_data = datetime.fromisoformat(
+                            v["data_ingresso"].replace("Z", "+00:00")
+                        )
+
+                    giorni = (oggi - ultima_data).days
+
+                    if giorni >= 30:
+                        lista_ferme.append({
+                            "Targa": v["targa"],
+                            "Modello": v["marca_modello"],
+                            "Zona": v["zona_attuale"],
+                            "Giorni inattiva": giorni
+                        })
+
+                except:
+                    pass
+
+        if lista_ferme:
+            df_ferme = pd.DataFrame(lista_ferme).sort_values("Giorni inattiva", ascending=False)
+
+            oltre_60 = len(df_ferme[df_ferme["Giorni inattiva"] >= 60])
+            oltre_90 = len(df_ferme[df_ferme["Giorni inattiva"] >= 90])
+
+            c1, c2, c3 = st.columns(3)
+            c1.metric("⚠️ Oltre 30 giorni", len(df_ferme))
+            c2.metric("🔴 Oltre 60 giorni", oltre_60)
+            c3.metric("🚨 Oltre 90 giorni", oltre_90)
+
+            # Evidenziazione intelligente
+            def evidenzia(r):
+                if r["Giorni inattiva"] >= 90:
+                    return ['background-color: #ff4d4d']*4
+                elif r["Giorni inattiva"] >= 60:
+                    return ['background-color: #ffa500']*4
+                else:
+                    return ['background-color: #ffff99']*4
+
+            st.dataframe(df_ferme.style.apply(evidenzia, axis=1), use_container_width=True)
+
+        else:
+            st.success("✅ Nessuna vettura inattiva oltre 30 giorni")
+
     # --- 12. EXPORT --- 
     elif scelta == "📊 Export": 
         st.subheader("📊 Export Piazzale") 
