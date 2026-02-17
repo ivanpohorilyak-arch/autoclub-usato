@@ -35,30 +35,55 @@ TIMEOUT_MINUTI = 20
 
 st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1 Master", layout="wide")
 
-# --- APPLICAZIONE TEMA NERO ---
+# --- APPLICAZIONE TEMA NERO DEFINITIVA ---
 st.markdown("""
-    <style>
-        .stApp {
-            background-color: #000000;
-            color: white;
-        }
+<style>
+    /* Sfondo generale */
+    .stApp {
+        background-color: #000000;
+        color: white;
+    }
 
-        section[data-testid="stSidebar"] {
-            background-color: #111111;
-        }
+    /* Sidebar */
+    section[data-testid="stSidebar"] {
+        background-color: #111111;
+    }
 
-        h1, h2, h3, h4, h5, h6, label, p, span, div {
-            color: white !important;
-        }
+    /* Titoli e testi */
+    h1, h2, h3, h4, h5, h6, label, p, span, div {
+        color: white !important;
+    }
 
-        .stDataFrame {
-            background-color: #111111;
-        }
+    /* DATAFRAME DARK MODE VERO */
+    div[data-testid="stDataFrame"] {
+        background-color: #111111 !important;
+    }
 
-        .stMetric {
-            color: white;
-        }
-    </style>
+    div[data-testid="stDataFrame"] table {
+        background-color: #111111 !important;
+        color: white !important;
+    }
+
+    div[data-testid="stDataFrame"] th {
+        background-color: #1f1f1f !important;
+        color: white !important;
+    }
+
+    div[data-testid="stDataFrame"] td {
+        background-color: #111111 !important;
+        color: white !important;
+    }
+
+    /* Hover righe */
+    div[data-testid="stDataFrame"] tr:hover {
+        background-color: #222222 !important;
+    }
+
+    /* Metric */
+    .stMetric {
+        color: white !important;
+    }
+</style>
 """, unsafe_allow_html=True)
 
 # --- 3. GESTIONE SESSIONE ---
@@ -259,7 +284,7 @@ else:
         st.session_state['heartbeat'] = st_autorefresh(interval=30000, key="presence_heartbeat") 
         aggiorna_presenza(utente_attivo, st.session_state["pagina_attuale"]) 
         st.markdown("---") 
-        st.markdown("### 📷 Scanner QR") 
+        st.markdown("### ### 📷 Scanner QR") 
         st.checkbox("Attiva scanner", key="camera_attiva") 
         if st.button("Log-out"): 
             st.session_state.clear() 
@@ -592,7 +617,7 @@ else:
         else:
             st.success("✅ Nessuna chiave duplicata rilevata")
 
-        # --- CONTROLLO VETTURE FERME (VERSIONE OTTIMIZZATA + 14 GIORNI) ---
+        # --- CONTROLLO VETTURE FERME (VERSIONE OTTIMIZZATA + ANTI-CRASH NULL) ---
         st.markdown("---")
         st.markdown("### 🕒 Monitoraggio Vetture Inattive")
 
@@ -611,8 +636,17 @@ else:
 
         if res_log_all.data:
             for r in res_log_all.data:
-                t = r["targa"]
-                data = datetime.fromisoformat(r["created_at"].replace("Z", "+00:00"))
+                t = r.get("targa")
+                created = r.get("created_at")
+
+                if not t or not created:
+                    continue
+
+                try:
+                    data = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                except:
+                    continue
+
                 if t not in ultimo_mov or data > ultimo_mov[t]:
                     ultimo_mov[t] = data
 
@@ -625,13 +659,17 @@ else:
                     ultima_data = ultimo_mov.get(v["targa"])
 
                     if not ultima_data:
-                        ultima_data = datetime.fromisoformat(
-                            v["data_ingresso"].replace("Z", "+00:00")
-                        )
+                        ingresso = v.get("data_ingresso")
+                        if not ingresso:
+                            continue
+                        try:
+                            ultima_data = datetime.fromisoformat(ingresso.replace("Z", "+00:00"))
+                        except:
+                            continue
 
                     giorni = (oggi - ultima_data).days
 
-                    if giorni >= 14: # 🔥 soglia minima
+                    if giorni >= 14: # soglia minima
                         lista_ferme.append({
                             "Targa": v["targa"],
                             "Modello": v["marca_modello"],
