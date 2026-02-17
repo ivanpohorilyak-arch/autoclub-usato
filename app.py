@@ -384,7 +384,7 @@ else:
                             return ""
                         
                         df_log["Nota"] = df_log["dettaglio"].apply(estrai_nota)
-                        st.dataframe(df_log[["Ora", "azione", "utente", "dettaglio", "Nota"]], use_container_width=True) 
+                        st.dataframe(df_log"Ora", "azione", "utente", "dettaglio", "Nota", use_container_width=True) 
                     else: st.info("Nessuno storico disponibile") 
                 st.markdown("---") 
                 col_a, col_b, col_c = st.columns(3) 
@@ -567,77 +567,6 @@ else:
         else:
             st.success("✅ Nessuna chiave duplicata rilevata")
 
-        # --- CONTROLLO VETTURE FERME (ULTIMO MOVIMENTO REALE) ---
-        st.markdown("---")
-        st.markdown("### 🕒 Monitoraggio Vetture Inattive")
-
-        res_ferme = supabase.table("parco_usato") \
-            .select("targa, marca_modello, zona_attuale, data_ingresso") \
-            .eq("stato", "PRESENTE") \
-            .execute()
-
-        oggi = datetime.now(timezone.utc)
-        lista_ferme = []
-
-        if res_ferme.data:
-            for v in res_ferme.data:
-                try:
-                    # Cerca ultima movimentazione reale
-                    log_last = supabase.table("log_movimenti") \
-                        .select("created_at") \
-                        .eq("targa", v["targa"]) \
-                        .order("created_at", desc=True) \
-                        .limit(1) \
-                        .execute()
-
-                    if log_last.data:
-                        ultima_data = datetime.fromisoformat(
-                            log_last.data[0]["created_at"].replace("Z", "+00:00")
-                        )
-                    else:
-                        # fallback se non esiste log
-                        ultima_data = datetime.fromisoformat(
-                            v["data_ingresso"].replace("Z", "+00:00")
-                        )
-
-                    giorni = (oggi - ultima_data).days
-
-                    if giorni >= 30:
-                        lista_ferme.append({
-                            "Targa": v["targa"],
-                            "Modello": v["marca_modello"],
-                            "Zona": v["zona_attuale"],
-                            "Giorni inattiva": giorni
-                        })
-
-                except:
-                    pass
-
-        if lista_ferme:
-            df_ferme = pd.DataFrame(lista_ferme).sort_values("Giorni inattiva", ascending=False)
-
-            oltre_60 = len(df_ferme[df_ferme["Giorni inattiva"] >= 60])
-            oltre_90 = len(df_ferme[df_ferme["Giorni inattiva"] >= 90])
-
-            c1, c2, c3 = st.columns(3)
-            c1.metric("⚠️ Oltre 30 giorni", len(df_ferme))
-            c2.metric("🔴 Oltre 60 giorni", oltre_60)
-            c3.metric("🚨 Oltre 90 giorni", oltre_90)
-
-            # Evidenziazione intelligente
-            def evidenzia(r):
-                if r["Giorni inattiva"] >= 90:
-                    return ['background-color: #ff4d4d']*4
-                elif r["Giorni inattiva"] >= 60:
-                    return ['background-color: #ffa500']*4
-                else:
-                    return ['background-color: #ffff99']*4
-
-            st.dataframe(df_ferme.style.apply(evidenzia, axis=1), use_container_width=True)
-
-        else:
-            st.success("✅ Nessuna vettura inattiva oltre 30 giorni")
-
     # --- 12. EXPORT --- 
     elif scelta == "📊 Export": 
         st.subheader("📊 Export Piazzale") 
@@ -648,7 +577,7 @@ else:
         res = query.execute() 
         if res.data: 
             df = pd.DataFrame(res.data) 
-            st.dataframe(df[["targa", "marca_modello", "colore", "zona_attuale", "numero_chiave", "note"]], use_container_width=True) 
+            st.dataframe(df"targa", "marca_modello", "colore", "zona_attuale", "numero_chiave", "note", use_container_width=True) 
             out = BytesIO() 
             with pd.ExcelWriter(out, engine="xlsxwriter") as writer: df.to_excel(writer, index=False, sheet_name="Piazzale") 
             st.download_button("📥 SCARICA EXCEL", out.getvalue(), "Piazzale.xlsx", use_container_width=True) 
@@ -670,7 +599,7 @@ else:
         if res.data: 
             df = pd.DataFrame(res.data) 
             df["Ora"] = pd.to_datetime(df["created_at"]).dt.tz_convert("Europe/Rome").dt.strftime("%d/%m/%Y %H:%M:%S") 
-            st.dataframe(df[["Ora", "targa", "azione", "utente", "dettaglio"]], use_container_width=True) 
+            st.dataframe(df"Ora", "targa", "azione", "utente", "dettaglio", use_container_width=True) 
 
     # --- 15. STAMPA QR --- 
     elif scelta == "🖨️ Stampa QR": 
@@ -695,7 +624,7 @@ else:
         st.subheader("📍 Storico Zona") 
         z_sel = st.selectbox("Zona", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}") 
         res = supabase.table("log_movimenti").select("*").ilike("dettaglio", f"%{ZONE_INFO[z_sel]}%").limit(50).execute() 
-        if res.data: st.dataframe(pd.DataFrame(res.data)[["targa", "azione", "utente"]], use_container_width=True) 
+        if res.data: st.dataframe(pd.DataFrame(res.data)"targa", "azione", "utente", use_container_width=True) 
 
     # --- 18. GESTIONE UTENTI (ADMIN ONLY) --- 
     elif scelta == "👥 Gestione Utenti": 
@@ -704,7 +633,7 @@ else:
         res_all = supabase.table("utenti").select("*").order("nome").execute() 
         if res_all.data: 
             df_ut = pd.DataFrame(res_all.data) 
-            st.dataframe(df_ut[["nome", "ruolo", "attivo", "can_consegna"]], use_container_width=True) 
+            st.dataframe(df_ut"nome", "ruolo", "attivo", "can_consegna", use_container_width=True) 
         col_ut1, col_ut2 = st.columns(2) 
         with col_ut1: 
             with st.form("add_user"): 
