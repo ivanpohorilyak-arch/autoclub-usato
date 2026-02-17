@@ -35,18 +35,18 @@ TIMEOUT_MINUTI = 20
 
 st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1 Master", layout="wide")
 
-# --- APPLICAZIONE TEMA NERO DEFINITIVA (POTENZIATA PER iOS) ---
+# --- APPLICAZIONE TEMA NERO DEFINITIVA (OTTIMIZZATA PER iOS/SAFARI) ---
 st.markdown("""
 <style>
-    /* Forza schema colori scuro per browser mobile */
+    /* Forza lo schema dark a livello di sistema operativo browser */
     :root {
         color-scheme: dark;
     }
 
-    /* Sfondo generale */
+    /* Sfondo principale */
     .stApp {
         background-color: #000000 !important;
-        color: white !important;
+        color: #ffffff !important;
     }
 
     /* Sidebar */
@@ -54,47 +54,50 @@ st.markdown("""
         background-color: #111111 !important;
     }
 
-    /* Titoli e testi */
-    h1, h2, h3, h4, h5, h6, label, p, span, div {
-        color: white !important;
+    /* Input Fields, Selectbox e Textarea (Fix per iOS bianco) */
+    input, select, textarea, div[data-baseweb="select"], div[data-baseweb="input"] {
+        background-color: #1A1A1A !important;
+        color: #ffffff !important;
+        border: 1px solid #333333 !important;
     }
 
-    /* DATAFRAME DARK MODE VERO */
+    /* Testi e Label */
+    h1, h2, h3, h4, h5, h6, label, p, span, div {
+        color: #ffffff !important;
+    }
+
+    /* DATAFRAME DARK MODE */
     div[data-testid="stDataFrame"], div[data-testid="stDataFrame"] > div {
         background-color: #111111 !important;
     }
 
     div[data-testid="stDataFrame"] table {
         background-color: #111111 !important;
-        color: white !important;
+        color: #ffffff !important;
     }
 
     div[data-testid="stDataFrame"] th {
-        background-color: #1f1f1f !important;
-        color: white !important;
+        background-color: #222222 !important;
+        color: #ffffff !important;
     }
 
     div[data-testid="stDataFrame"] td {
         background-color: #111111 !important;
-        color: white !important;
+        color: #ffffff !important;
     }
 
-    /* Hover righe */
-    div[data-testid="stDataFrame"] tr:hover {
-        background-color: #222222 !important;
-    }
-
-    /* Metric */
-    .stMetric {
-        color: white !important;
+    /* Metric Card */
+    div[data-testid="stMetricValue"] > div {
+        color: #ffffff !important;
     }
     
-    /* Input Fields per iOS */
-    .stTextInput input, .stNumberInput input, .stTextArea textarea {
+    /* Bottone primario (opzionale: colore Center) */
+    .stButton > button {
         background-color: #222222 !important;
         color: white !important;
         border: 1px solid #444444 !important;
     }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -383,7 +386,7 @@ else:
                 
         if st.session_state.get("ingresso_salvato"): 
             info = st.session_state["ingresso_salvato"] 
-            st.markdown(f""" <div style="background-color:#d4edda; border:1px solid #28a745; padding:16px; border-radius:10px; color:#155724;"> <h4>✅ Vettura registrata correttamente</h4> <b>🚗 Targa:</b> {info['targa']}<br> <b>📦 Modello:</b> {info['modello']}<br> <b>🎨 Colore:</b> {info['colore']}<br> <b>📏 Chilometri:</b> {info['km']}<br> <b>🔑 Numero chiave:</b> {info['chiave']}<br> <b>📍 Zona:</b> {info['zona']} </div> """, unsafe_allow_html=True) 
+            st.markdown(f""" <div style="background-color:#1E3A1E; border:1px solid #28a745; padding:16px; border-radius:10px; color:#ffffff;"> <h4>✅ Vettura registrata correttamente</h4> <b>🚗 Targa:</b> {info['targa']}<br> <b>📦 Modello:</b> {info['modello']}<br> <b>🎨 Colore:</b> {info['colore']}<br> <b>📏 Chilometri:</b> {info['km']}<br> <b>🔑 Numero chiave:</b> {info['chiave']}<br> <b>📍 Zona:</b> {info['zona']} </div> """, unsafe_allow_html=True) 
             if st.button("🆕 NUOVA REGISTRAZIONE", use_container_width=True): 
                 st.session_state["ingresso_salvato"] = False 
                 st.session_state["zona_id"] = "" 
