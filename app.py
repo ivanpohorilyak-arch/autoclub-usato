@@ -567,7 +567,7 @@ else:
         else:
             st.success("✅ Nessuna chiave duplicata rilevata")
 
-        # --- CONTROLLO VETTURE FERME (ULTIMO MOVIMENTO REALE) ---
+        # --- CONTROLLO VETTURE FERME (VERSIONE OTTIMIZZATA + 14 GIORNI) ---
         st.markdown("---")
         st.markdown("### 🕒 Monitoraggio Vetture Inattive")
 
@@ -576,67 +576,74 @@ else:
             .eq("stato", "PRESENTE") \
             .execute()
 
+        # UNA SOLA QUERY movimenti reali
+        res_log_all = supabase.table("log_movimenti") \
+            .select("targa, created_at, azione") \
+            .in_("azione", ["Ingresso", "Spostamento"]) \
+            .execute()
+
+        ultimo_mov = {}
+
+        if res_log_all.data:
+            for r in res_log_all.data:
+                t = r["targa"]
+                data = datetime.fromisoformat(r["created_at"].replace("Z", "+00:00"))
+                if t not in ultimo_mov or data > ultimo_mov[t]:
+                    ultimo_mov[t] = data
+
         oggi = datetime.now(timezone.utc)
         lista_ferme = []
 
         if res_ferme.data:
             for v in res_ferme.data:
                 try:
-                    # Cerca ultima movimentazione reale
-                    log_last = supabase.table("log_movimenti") \
-                        .select("created_at") \
-                        .eq("targa", v["targa"]) \
-                        .order("created_at", desc=True) \
-                        .limit(1) \
-                        .execute()
+                    ultima_data = ultimo_mov.get(v["targa"])
 
-                    if log_last.data:
-                        ultima_data = datetime.fromisoformat(
-                            log_last.data[0]["created_at"].replace("Z", "+00:00")
-                        )
-                    else:
-                        # fallback se non esiste log
+                    if not ultima_data:
                         ultima_data = datetime.fromisoformat(
                             v["data_ingresso"].replace("Z", "+00:00")
                         )
 
                     giorni = (oggi - ultima_data).days
 
-                    if giorni >= 30:
+                    if giorni >= 14: # 🔥 soglia minima
                         lista_ferme.append({
                             "Targa": v["targa"],
                             "Modello": v["marca_modello"],
                             "Zona": v["zona_attuale"],
                             "Giorni inattiva": giorni
                         })
-
                 except:
                     pass
 
         if lista_ferme:
             df_ferme = pd.DataFrame(lista_ferme).sort_values("Giorni inattiva", ascending=False)
 
+            oltre_14 = len(df_ferme[df_ferme["Giorni inattiva"] >= 14])
+            oltre_30 = len(df_ferme[df_ferme["Giorni inattiva"] >= 30])
             oltre_60 = len(df_ferme[df_ferme["Giorni inattiva"] >= 60])
             oltre_90 = len(df_ferme[df_ferme["Giorni inattiva"] >= 90])
 
-            c1, c2, c3 = st.columns(3)
-            c1.metric("⚠️ Oltre 30 giorni", len(df_ferme))
-            c2.metric("🔴 Oltre 60 giorni", oltre_60)
-            c3.metric("🚨 Oltre 90 giorni", oltre_90)
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("🟡 Oltre 14 giorni", oltre_14)
+            c2.metric("⚠️ Oltre 30 giorni", oltre_30)
+            c3.metric("🔴 Oltre 60 giorni", oltre_60)
+            c4.metric("🚨 Oltre 90 giorni", oltre_90)
 
-            # Evidenziazione intelligente
             def evidenzia(r):
                 if r["Giorni inattiva"] >= 90:
                     return ['background-color: #ff4d4d']*4
                 elif r["Giorni inattiva"] >= 60:
                     return ['background-color: #ffa500']*4
-                else:
+                elif r["Giorni inattiva"] >= 30:
                     return ['background-color: #ffff99']*4
+                else:
+                    return ['background-color: #d9edf7']*4 # 14-29
 
             st.dataframe(df_ferme.style.apply(evidenzia, axis=1), use_container_width=True)
 
         else:
-            st.success("✅ Nessuna vettura inattiva oltre 30 giorni")
+            st.success("✅ Nessuna vettura inattiva oltre 14 giorni")
 
     # --- 12. EXPORT --- 
     elif scelta == "📊 Export": 
