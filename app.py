@@ -38,76 +38,67 @@ st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1 Master", layout="wide")
 # --- APPLICAZIONE TEMA NERO DEFINITIVA (FIX TOTALE iOS & SAFARI) ---
 st.markdown("""
 <style>
-    /* Forza schema colori scuro a livello browser */
-    :root {
-        color-scheme: dark;
-    }
 
-    /* Sfondo generale */
-    .stApp {
-        background-color: #000000 !important;
-        color: #ffffff !important;
-    }
+/* Forza dark mode browser */
+:root {
+    color-scheme: dark;
+}
 
-    /* Sidebar */
-    section[data-testid="stSidebar"] {
-        background-color: #111111 !important;
-    }
+/* Sfondo generale */
+.stApp {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
 
-    /* Titoli e testi */
-    h1, h2, h3, h4, h5, h6, label, p, span, div {
-        color: #ffffff !important;
-    }
+/* Sidebar */
+section[data-testid="stSidebar"] {
+    background-color: #111111 !important;
+}
 
-    /* Fix visibilità Input, Selectbox e Dropdown su iOS (Safari) */
-    input, select, textarea, [data-baseweb="select"], [data-baseweb="input"], [role="combobox"] {
-        background-color: #1A1A1A !important;
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important; 
-        border: 1px solid #333333 !important;
-    }
+/* Testi */
+h1, h2, h3, h4, h5, h6, label, p, span, div {
+    color: #ffffff !important;
+}
 
-    /* Forza colore testi dentro i widget Streamlit */
-    div[data-testid="stSelectbox"] div, div[data-testid="stTextInput"] div, div[data-testid="stNumberInput"] div {
-        color: #ffffff !important;
-    }
+/* 🔥 FIX TOTALE INPUT IOS */
+input, textarea, select {
+    background-color: #1A1A1A !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    border: 1px solid #333333 !important;
+    outline: none !important;
+    box-shadow: none !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+}
 
-    /* DATAFRAME DARK MODE VERO */
-    div[data-testid="stDataFrame"], div[data-testid="stDataFrame"] > div {
-        background-color: #111111 !important;
-    }
+/* Fix specifico selectbox Streamlit */
+div[data-baseweb="select"] > div {
+    background-color: #1A1A1A !important;
+    color: #ffffff !important;
+    border: 1px solid #333333 !important;
+}
 
-    div[data-testid="stDataFrame"] table {
-        background-color: #111111 !important;
-        color: #ffffff !important;
-    }
+/* Rimuove bordo rosso focus iOS */
+input:focus, select:focus, textarea:focus {
+    border: 1px solid #555555 !important;
+    outline: none !important;
+    box-shadow: none !important;
+}
 
-    div[data-testid="stDataFrame"] th {
-        background-color: #1f1f1f !important;
-        color: #ffffff !important;
-    }
+/* Dataframe dark */
+div[data-testid="stDataFrame"] table {
+    background-color: #111111 !important;
+    color: #ffffff !important;
+}
 
-    div[data-testid="stDataFrame"] td {
-        background-color: #111111 !important;
-        color: #ffffff !important;
-    }
+/* Bottoni */
+.stButton > button {
+    background-color: #222222 !important;
+    color: white !important;
+    border: 1px solid #444444 !important;
+}
 
-    /* Hover righe */
-    div[data-testid="stDataFrame"] tr:hover {
-        background-color: #222222 !important;
-    }
-
-    /* Metric */
-    .stMetric {
-        color: #ffffff !important;
-    }
-
-    /* Bottoni */
-    .stButton > button {
-        background-color: #222222 !important;
-        color: white !important;
-        border: 1px solid #444444 !important;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -796,12 +787,12 @@ else:
             with st.form("add_user"): 
                 st.markdown("### ➕ Aggiungi Nuovo") 
                 n_nome = st.text_input("Nome e Cognome") 
-                p_pin = st.text_input("PIN", type="password") 
-                r_ruolo = st.selectbox("Ruolo", ["operatore", "admin"]) 
+                p = st.text_input("PIN", type="password") 
+                r = st.selectbox("Ruolo", ["operatore", "admin"]) 
                 c_cons = st.checkbox("Autorizzato alla CONSEGNA") 
                 if st.form_submit_button("CREA UTENTE"): 
                     if n_nome and p_pin: 
-                        supabase.table("utenti").insert({"nome": n_nome, "pin": p_pin, "ruolo": r_ruolo, "attivo": True, "can_consegna": c_cons}).execute() 
+                        supabase.table("utenti").insert({"nome": n_nome, "pin": p_pin, "ruolo": r, "attivo": True, "can_consegna": c_cons}).execute() 
                         st.success(f"✅ Creato"); time.sleep(1); st.rerun() 
         with col_ut2: 
             if res_all.data: 
