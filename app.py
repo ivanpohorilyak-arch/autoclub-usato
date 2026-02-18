@@ -35,12 +35,12 @@ TIMEOUT_MINUTI = 20
 
 st.set_page_config(
     page_title="Autoclub Usato",
-    page_icon="assets/icon.png",
+    page_icon="assets/icon_v2.png",
     layout="wide"
 )
 
 st.markdown("""
-<link rel="apple-touch-icon" href="https://cdn.jsdelivr.net/gh/ivanpohorilyak-arch/autoclub-usato@main/assets/icon.png">
+<link rel="apple-touch-icon" href="https://cdn.jsdelivr.net/gh/ivanpohorilyak-arch/autoclub-usato@main/assets/icon_v2.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 """, unsafe_allow_html=True)
