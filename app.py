@@ -268,7 +268,16 @@ if st.session_state['user_autenticato'] is None:
     else:
         u = st.selectbox("Operatore", ["- Seleziona -"] + lista_u)
 
-    p = st.text_input("PIN", type="password", max_chars=4, key="pin_login")
+p = st.number_input(
+    "PIN",
+    min_value=0,
+    max_value=9999,
+    step=1,
+    format="%04d",
+    key="pin_login"
+)
+
+p = str(p).zfill(4)    
 
     # Auto invio al 4° numero
     if len(p) == 4:
