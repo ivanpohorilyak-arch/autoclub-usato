@@ -252,16 +252,11 @@ if st.session_state['user_autenticato'] is None:
     else:
         u = st.selectbox("Operatore", ["- Seleziona -"] + lista_u)
 
-    p = st.text_input("PIN", max_chars=4, key="pin_login", placeholder="••••"
-    )
-
-    # Permetti solo numeri
+    p = st.text_input("PIN", max_chars=4, key="pin_login", placeholder="••••", type="password")
     p = ''.join(filter(str.isdigit, p))
 
-    # Auto login al 4° numero
-if len(p) == 4:
-    user = login_db(u, p)
-        user = login_db(u, p_str)
+    if len(p) == 4:
+        user = login_db(u, p)
         if user:
             st.session_state['user_autenticato'] = user["nome"]
             st.session_state['ruolo'] = user["ruolo"]
@@ -272,7 +267,6 @@ if len(p) == 4:
             st.markdown("""<script>if (navigator.vibrate) { navigator.vibrate([100, 50, 100]); }</script>""", unsafe_allow_html=True)
             st.markdown('<div class="shake">❌ PIN ERRATO</div>', unsafe_allow_html=True)
             time.sleep(0.6)
-
 
 else:
     utente_attivo = st.session_state['user_autenticato'] 
