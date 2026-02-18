@@ -228,16 +228,9 @@ controllo_timeout()
 
 # --- 6. LOGIN & MENU PRINCIPALE ---
 if st.session_state['user_autenticato'] is None:
-
-    # CSS solo per login
     st.markdown("""
     <style>
-    .pin-input input {
-        font-size: 32px !important;
-        text-align: center !important;
-        letter-spacing: 10px !important;
-    }
-
+    .pin-input input { font-size: 32px !important; text-align: center !important; letter-spacing: 10px !important; }
     @keyframes shake {
       0% { transform: translateX(0px); }
       20% { transform: translateX(-8px); }
@@ -246,63 +239,35 @@ if st.session_state['user_autenticato'] is None:
       80% { transform: translateX(8px); }
       100% { transform: translateX(0px); }
     }
-
-    .shake {
-      animation: shake 0.4s;
-      color: red;
-      font-weight: bold;
-      text-align: center;
-      font-size: 18px;
-    }
+    .shake { animation: shake 0.4s; color: red; font-weight: bold; text-align: center; font-size: 18px; }
     </style>
     """, unsafe_allow_html=True)
 
     st.title("🔐 Accesso Autoclub Center Usato 1.1 Master")
-
     lista_u = get_lista_utenti_login()
 
-    # AUTO LOGIN se unico utente
     if len(lista_u) == 1:
         u = lista_u[0]
         st.info(f"👤 Accesso rapido per {u}")
     else:
         u = st.selectbox("Operatore", ["- Seleziona -"] + lista_u)
 
-p = st.number_input(
-    "PIN",
-    min_value=0,
-    max_value=9999,
-    step=1,
-    format="%04d",
-    key="pin_login"
-)
+    p = st.number_input("PIN", min_value=0, max_value=9999, step=1, format="%04d", key="pin_login")
+    p_str = str(p).zfill(4)    
 
-p = str(p).zfill(4)    
-
-# Auto invio al 4° numero
-if len(p) == 4:
-user = login_db(u, p)
-if user:
-st.session_state['user_autenticato'] = user["nome"]
-st.session_state['ruolo'] = user["ruolo"]
-st.session_state['can_consegna'] = user.get("can_consegna", False)
-aggiorna_attivita()
- st.rerun()
-            
+    if st.button("ACCEDI") or len(str(p)) == 4:
+        user = login_db(u, p_str)
+        if user:
+            st.session_state['user_autenticato'] = user["nome"]
+            st.session_state['ruolo'] = user["ruolo"]
+            st.session_state['can_consegna'] = user.get("can_consegna", False)
+            aggiorna_attivita()
+            st.rerun()
         else:
-            # Vibrazione errore
-            st.markdown("""
-            <script>
-            if (navigator.vibrate) {
-                navigator.vibrate([100, 50, 100]);
-            }
-            </script>
-            """, unsafe_allow_html=True)
-
+            st.markdown("""<script>if (navigator.vibrate) { navigator.vibrate([100, 50, 100]); }</script>""", unsafe_allow_html=True)
             st.markdown('<div class="shake">❌ PIN ERRATO</div>', unsafe_allow_html=True)
             time.sleep(0.6)
-            st.session_state["pin_login"] = ""
-            st.rerun() 
+
 
 else:
     utente_attivo = st.session_state['user_autenticato'] 
