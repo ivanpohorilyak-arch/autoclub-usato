@@ -33,14 +33,18 @@ ZONE_INFO = {
 
 TIMEOUT_MINUTI = 20
 
-st.set_page_config(page_title="AUTOCLUB CENTER USATO 1.1 Master", layout="wide")
+st.set_page_config(
+    page_title="Autoclub Usato",
+    page_icon="assets/icon.png",
+    layout="wide"
+)
 
 st.markdown("""
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Autoclub Usato">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/743/743922.png">
+<link rel="apple-touch-icon" href="https://autoclub-usato-jzf2yhapptq6wuhtpxmlzs.streamlit.app/icon.png">
 """, unsafe_allow_html=True)
 
 # --- 3. GESTIONE SESSIONE ---
