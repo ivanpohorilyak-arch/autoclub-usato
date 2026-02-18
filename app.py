@@ -271,24 +271,15 @@ if st.session_state['user_autenticato'] is None:
     p = st.text_input("PIN", type="password", max_chars=4, key="pin_login")
 
     # Auto invio al 4° numero
-    if len(p) == 4 and u != "- Seleziona -":
+    if len(p) == 4:
         user = login_db(u, p)
         if user:
             st.session_state['user_autenticato'] = user["nome"]
             st.session_state['ruolo'] = user["ruolo"]
             st.session_state['can_consegna'] = user.get("can_consegna", False)
             aggiorna_attivita()
-
-            # Vibrazione JS
-            st.markdown("""
-            <script>
-            if (navigator.vibrate) {
-                navigator.vibrate(150);
-            }
-            </script>
-            """, unsafe_allow_html=True)
-
             st.rerun()
+            
         else:
             # Vibrazione errore
             st.markdown("""
