@@ -91,19 +91,31 @@ def controllo_timeout():
             st.rerun() 
 
 # --- 4. FUNZIONI LOGIN & DATABASE ---
+
 def login_db(nome, pin):
-    try: 
-        res = supabase.table("utenti").select("nome, ruolo, can_consegna").eq("nome", nome).eq("pin", pin).eq("attivo", True).limit(1).execute() 
-        return res.data[0] if res.data else None 
-    except Exception as e: 
-        st.error(f"Errore login: {e}") 
-        return None 
+    try:
+        res = supabase.rpc(
+            "login_operatore",
+            {
+                "nome_input": nome,
+                "pin_input": pin
+            }
+        ).execute()
+
+        return res.data[0] if res.data else None
+
+    except Exception as e:
+        st.error(f"Errore login: {e}")
+        return None
+
 
 def get_lista_utenti_login():
-    try: 
-        res = supabase.table("utenti").select("nome").eq("attivo", True).order("nome").execute() 
-        return [u["nome"] for u in res.data] if res.data else [] 
-    except: return [] 
+    try:
+        res = supabase.rpc("lista_utenti_attivi").execute()
+        return [u["nome"] for u in res.data] if res.data else []
+    except Exception as e:
+        st.error(f"Errore recupero utenti: {e}")
+        return [] 
 
 # --- 5. FUNZIONI CORE ---
 def trova_prima_chiave_libera():
