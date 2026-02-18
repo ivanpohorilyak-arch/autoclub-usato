@@ -252,7 +252,7 @@ if st.session_state['user_autenticato'] is None:
     else:
         u = st.selectbox("Operatore", ["- Seleziona -"] + lista_u)
 
-    p = st.number_input("PIN", min_value=0, max_value=9999, step=1, format="%04d", key="pin_login")
+    p = st.number_input("PIN", min_value=0, max_value=9999, step=1, key="pin_login")
     p_str = str(p).zfill(4)    
 
     if st.button("ACCEDI") or len(str(p)) == 4:
