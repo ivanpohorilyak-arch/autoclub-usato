@@ -279,15 +279,15 @@ p = st.number_input(
 
 p = str(p).zfill(4)    
 
-    # Auto invio al 4° numero
-    if len(p) == 4:
-        user = login_db(u, p)
-        if user:
-            st.session_state['user_autenticato'] = user["nome"]
-            st.session_state['ruolo'] = user["ruolo"]
-            st.session_state['can_consegna'] = user.get("can_consegna", False)
-            aggiorna_attivita()
-            st.rerun()
+# Auto invio al 4° numero
+if len(p) == 4:
+user = login_db(u, p)
+if user:
+st.session_state['user_autenticato'] = user["nome"]
+st.session_state['ruolo'] = user["ruolo"]
+st.session_state['can_consegna'] = user.get("can_consegna", False)
+aggiorna_attivita()
+ st.rerun()
             
         else:
             # Vibrazione errore
