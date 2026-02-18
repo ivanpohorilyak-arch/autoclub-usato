@@ -654,38 +654,170 @@ else:
         if res.data: st.dataframe(pd.DataFrame(res.data)[["targa", "azione", "utente"]], use_container_width=True) 
 
     # --- 18. GESTIONE UTENTI (ADMIN ONLY) --- 
-    elif scelta == "👥 Gestione Utenti": 
-        st.subheader("👥 Gestione Utenti (Admin)") 
-        if st.session_state["ruolo"] != "admin": st.error("Accesso non autorizzato"); st.stop() 
-        res_all = supabase.table("utenti").select("*").order("nome").execute() 
-        if res_all.data: 
-            df_ut = pd.DataFrame(res_all.data) 
-            st.dataframe(df_ut[["nome", "ruolo", "attivo", "can_consegna"]], use_container_width=True) 
-        col_ut1, col_ut2 = st.columns(2) 
-        with col_ut1: 
-            with st.form("add_user"): 
-                st.markdown("### ➕ Aggiungi Nuovo") 
-                n = st.text_input("Nome e Cognome") 
-                p = st.text_input("PIN", type="password") 
-                r = st.selectbox("Ruolo", ["operatore", "admin"]) 
-                c_cons = st.checkbox("Autorizzato alla CONSEGNA") 
-                if st.form_submit_button("CREA UTENTE"): 
-                    if n and p: 
-                        supabase.table("utenti").insert({"nome": n, "pin": p, "ruolo": r, "attivo": True, "can_consegna": c_cons}).execute() 
-                        st.success(f"✅ Creato"); time.sleep(1); st.rerun() 
-        with col_ut2: 
-            if res_all.data: 
-                st.markdown("### ✏️ Modifica / Disattiva") 
-                u_sel_nome = st.selectbox("Seleziona utente", [u["nome"] for u in res_all.data]) 
-                ut_data = next(u for u in res_all.data if u["nome"] == u_sel_nome) 
-                with st.form("edit_user"): 
-                    new_pin = st.text_input("Nuovo PIN (vuoto per non cambiare)", type="password") 
-                    new_ruolo = st.selectbox("Ruolo", ["operatore", "admin"], index=0 if ut_data["ruolo"] == "operatore" else 1) 
-                    new_can_cons = st.checkbox("Autorizzato alla CONSEGNA", value=ut_data.get("can_consegna", False)) 
-                    new_attivo = st.checkbox("Utente Attivo", value=ut_data["attivo"]) 
-                    if st.form_submit_button("SALVA MODIFICHE"): 
-                        upd = {"ruolo": new_ruolo, "can_consegna": new_can_cons, "attivo": new_attivo} 
-                        if new_pin: upd["pin"] = new_pin 
-                        supabase.table("utenti").update(upd).eq("nome", u_sel_nome).execute() 
-                        if u_sel_nome == st.session_state['user_autenticato']: st.session_state['can_consegna'] = new_can_cons 
-                        st.success("✅ Aggiornato"); time.sleep(1); st.rerun()
+    elif scelta == "👥 Gestione Utenti":
+    st.subheader("👥 Gestione Utenti (Admin)")
+
+    if st.session_state["ruolo"] != "admin":
+        st.error("Accesso non autorizzato")
+        st.stop()
+
+    utente_loggato = st.session_state["user_autenticato"]
+
+    # --- RECUPERO UTENTI ---
+    res_all = supabase.table("utenti").select("*").order("nome").execute()
+    utenti = res_all.data if res_all.data else []
+
+    if utenti:
+        df_ut = pd.DataFrame(utenti)
+        st.dataframe(
+            df_ut[["nome", "ruolo", "attivo", "can_consegna"]],
+            use_container_width=True
+        )
+
+    # Conta quanti admin attivi esistono
+    admin_attivi = [u for u in utenti if u["ruolo"] == "admin" and u["attivo"]]
+
+    st.markdown("---")
+
+    # ==================================================
+    # ➕ AGGIUNGI NUOVO UTENTE
+    # ==================================================
+    st.markdown("### ➕ Aggiungi Nuovo")
+
+    with st.form("add_user"):
+        n = st.text_input("Nome e Cognome")
+        p = st.text_input("PIN", type="password")
+        r = st.selectbox("Ruolo", ["operatore", "admin"])
+        c_cons = st.checkbox("Autorizzato alla CONSEGNA")
+
+        if st.form_submit_button("CREA UTENTE"):
+            if n and p:
+                supabase.table("utenti").insert({
+                    "nome": n,
+                    "pin": p,
+                    "ruolo": r,
+                    "attivo": True,
+                    "can_consegna": c_cons
+                }).execute()
+
+                st.success("✅ Utente creato")
+                time.sleep(1)
+                st.rerun()
+
+    st.markdown("---")
+
+    # ==================================================
+    # ✏️ MODIFICA / DISATTIVA / ELIMINA
+    # ==================================================
+    st.markdown("### ✏️ Modifica / Disattiva / Elimina")
+
+    if utenti:
+
+        u_sel_nome = st.selectbox(
+            "Seleziona utente",
+            [u["nome"] for u in utenti]
+        )
+
+        ut_data = next(u for u in utenti if u["nome"] == u_sel_nome)
+
+        with st.form("edit_user"):
+
+            new_pin = st.text_input(
+                "Nuovo PIN (vuoto per non cambiare)",
+                type="password"
+            )
+
+            new_ruolo = st.selectbox(
+                "Ruolo",
+                ["operatore", "admin"],
+                index=0 if ut_data["ruolo"] == "operatore" else 1
+            )
+
+            new_can_cons = st.checkbox(
+                "Autorizzato alla CONSEGNA",
+                value=ut_data.get("can_consegna", False)
+            )
+
+            new_attivo = st.checkbox(
+                "Utente Attivo",
+                value=ut_data["attivo"]
+            )
+
+            salva = st.form_submit_button("💾 SALVA MODIFICHE")
+            elimina = st.form_submit_button("🗑 ELIMINA DEFINITIVAMENTE")
+
+            # ==========================================
+            # SALVA MODIFICHE
+            # ==========================================
+            if salva:
+
+                # 🔒 BLOCCO: admin non può auto-disattivarsi
+                if (
+                    u_sel_nome == utente_loggato
+                    and ut_data["ruolo"] == "admin"
+                    and not new_attivo
+                ):
+                    st.error("❌ Non puoi disattivare te stesso come admin")
+                    st.stop()
+
+                # 🛑 BLOCCO: non puoi togliere l’ultimo admin
+                if (
+                    ut_data["ruolo"] == "admin"
+                    and new_ruolo != "admin"
+                    and len(admin_attivi) <= 1
+                ):
+                    st.error("❌ Non puoi rimuovere l’ultimo admin attivo")
+                    st.stop()
+
+                if (
+                    ut_data["ruolo"] == "admin"
+                    and not new_attivo
+                    and len(admin_attivi) <= 1
+                ):
+                    st.error("❌ Non puoi disattivare l’ultimo admin attivo")
+                    st.stop()
+
+                upd = {
+                    "ruolo": new_ruolo,
+                    "can_consegna": new_can_cons,
+                    "attivo": new_attivo
+                }
+
+                if new_pin:
+                    upd["pin"] = new_pin
+
+                supabase.table("utenti") \
+                    .update(upd) \
+                    .eq("nome", u_sel_nome) \
+                    .execute()
+
+                st.success("✅ Utente aggiornato")
+                time.sleep(1)
+                st.rerun()
+
+            # ==========================================
+            # 🗑 ELIMINAZIONE DEFINITIVA
+            # ==========================================
+            if elimina:
+
+                # 🔒 BLOCCO: non puoi eliminare te stesso
+                if u_sel_nome == utente_loggato:
+                    st.error("❌ Non puoi eliminare te stesso")
+                    st.stop()
+
+                # 🛑 BLOCCO: non puoi eliminare ultimo admin
+                if ut_data["ruolo"] == "admin" and len(admin_attivi) <= 1:
+                    st.error("❌ Non puoi eliminare l’ultimo admin attivo")
+                    st.stop()
+
+                supabase.table("utenti") \
+                    .delete() \
+                    .eq("nome", u_sel_nome) \
+                    .execute()
+
+                st.success("🗑 Utente eliminato definitivamente")
+                time.sleep(1)
+                st.rerun()
+
+    else:
+        st.info("Nessun utente presente")
