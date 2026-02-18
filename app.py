@@ -18,7 +18,8 @@ st.cache_resource.clear()
 
 # --- 1. CONFIGURAZIONE DATABASE ---
 supabase = create_client(
-    os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"] 
+    os.environ["SUPABASE_URL"], 
+    os.environ["SUPABASE_ANON_KEY"]
 )
 
 # --- 2. CONFIGURAZIONE ZONE ---
