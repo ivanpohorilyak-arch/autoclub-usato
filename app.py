@@ -228,45 +228,19 @@ controllo_timeout()
 
 # --- 6. LOGIN & MENU PRINCIPALE ---
 if st.session_state['user_autenticato'] is None:
-    st.markdown("""
-    <style>
-    .pin-input input { font-size: 32px !important; text-align: center !important; letter-spacing: 10px !important; }
-    @keyframes shake {
-      0% { transform: translateX(0px); }
-      20% { transform: translateX(-8px); }
-      40% { transform: translateX(8px); }
-      60% { transform: translateX(-8px); }
-      80% { transform: translateX(8px); }
-      100% { transform: translateX(0px); }
-    }
-    .shake { animation: shake 0.4s; color: red; font-weight: bold; text-align: center; font-size: 18px; }
-    </style>
-    """, unsafe_allow_html=True)
-
-    st.title("🔐 Accesso Autoclub Center Usato 1.1 Master")
-    lista_u = get_lista_utenti_login()
-
-    if len(lista_u) == 1:
-        u = lista_u[0]
-        st.info(f"👤 Accesso rapido per {u}")
-    else:
-        u = st.selectbox("Operatore", ["- Seleziona -"] + lista_u)
-
-    p = st.text_input("PIN", max_chars=4, key="pin_login", placeholder="••••", type="password")
-    p = ''.join(filter(str.isdigit, p))
-
-    if len(p) == 4:
-        user = login_db(u, p)
-        if user:
-            st.session_state['user_autenticato'] = user["nome"]
-            st.session_state['ruolo'] = user["ruolo"]
-            st.session_state['can_consegna'] = user.get("can_consegna", False)
-            aggiorna_attivita()
-            st.rerun()
-        else:
-            st.markdown("""<script>if (navigator.vibrate) { navigator.vibrate([100, 50, 100]); }</script>""", unsafe_allow_html=True)
-            st.markdown('<div class="shake">❌ PIN ERRATO</div>', unsafe_allow_html=True)
-            time.sleep(0.6)
+    st.title("🔐 Accesso Autoclub Center Usato 1.1 Master") 
+    lista_u = get_lista_utenti_login() 
+    u = st.selectbox("Operatore", ["- Seleziona -"] + lista_u) 
+    p = st.text_input("PIN", type="password") 
+    if st.button("ACCEDI", use_container_width=True): 
+        user = login_db(u, p) 
+        if user: 
+            st.session_state['user_autenticato'] = user["nome"] 
+            st.session_state['ruolo'] = user["ruolo"] 
+            st.session_state['can_consegna'] = user.get("can_consegna", False) 
+            aggiorna_attivita() 
+            st.rerun() 
+        else: st.error("Accesso negato: PIN errato o utente non attivo") 
 
 else:
     utente_attivo = st.session_state['user_autenticato'] 
@@ -437,7 +411,7 @@ else:
                             return ""
 
                         df_log["Nota"] = df_log["dettaglio"].apply(estrai_nota)
-                        st.dataframe(df_log[["Ora", "azione", "utente", "dettaglio", "Nota"]], use_container_width=True) 
+                        st.dataframe(df_log"Ora", "azione", "utente", "dettaglio", "Nota", use_container_width=True) 
                     else: st.info("Nessuno storico disponibile") 
                 st.markdown("---") 
                 col_a, col_b, col_c = st.columns(3) 
@@ -630,7 +604,7 @@ else:
         res = query.execute() 
         if res.data: 
             df = pd.DataFrame(res.data) 
-            st.dataframe(df[["targa", "marca_modello", "colore", "zona_attuale", "numero_chiave", "note"]], use_container_width=True) 
+            st.dataframe(df"targa", "marca_modello", "colore", "zona_attuale", "numero_chiave", "note", use_container_width=True) 
             out = BytesIO() 
             with pd.ExcelWriter(out, engine="xlsxwriter") as writer: df.to_excel(writer, index=False, sheet_name="Piazzale") 
             st.download_button("📥 SCARICA EXCEL", out.getvalue(), "Piazzale.xlsx", use_container_width=True) 
@@ -652,7 +626,7 @@ else:
         if res.data: 
             df = pd.DataFrame(res.data) 
             df["Ora"] = pd.to_datetime(df["created_at"]).dt.tz_convert("Europe/Rome").dt.strftime("%d/%m/%Y %H:%M:%S") 
-            st.dataframe(df[["Ora", "targa", "azione", "utente", "dettaglio"]], use_container_width=True) 
+            st.dataframe(df"Ora", "targa", "azione", "utente", "dettaglio", use_container_width=True) 
 
     # --- 15. STAMPA QR --- 
     elif scelta == "🖨️ Stampa QR": 
@@ -677,7 +651,7 @@ else:
         st.subheader("📍 Storico Zona") 
         z_sel = st.selectbox("Zona", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}") 
         res = supabase.table("log_movimenti").select("*").ilike("dettaglio", f"%{ZONE_INFO[z_sel]}%").limit(50).execute() 
-        if res.data: st.dataframe(pd.DataFrame(res.data)[["targa", "azione", "utente"]], use_container_width=True) 
+        if res.data: st.dataframe(pd.DataFrame(res.data)"targa", "azione", "utente", use_container_width=True) 
 
    # --- 17. GESTIONE UTENTI (ADMIN) --- 
     elif scelta == "👥 Gestione Utenti":
