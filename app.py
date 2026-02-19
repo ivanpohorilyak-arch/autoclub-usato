@@ -35,7 +35,7 @@ ZONE_INFO = {
 TIMEOUT_MINUTI = 20
 
 st.set_page_config(
-    page_title="Autoclub Usato 1.1 Master",
+    page_title="Autoclub Usato 1.1",
     page_icon="assets/icon.png",
     layout="wide"
 )
@@ -108,7 +108,6 @@ def login_db(nome, pin):
     except Exception as e:
         st.error(f"Errore login: {e}")
         return None
-
 
 def get_lista_utenti_login():
     try:
