@@ -11,6 +11,35 @@ import numpy as np
 import qrcode
 from PIL import Image
 from streamlit_autorefresh import st_autorefresh
+from datetime import datetime, timezone
+
+SESSION_DEFAULTS = {
+    "user_autenticato": None,
+    "ruolo": None,
+    "can_consegna": False,
+    "last_action": None,
+    "zona_id": "",
+    "zona_nome": "",
+    "camera_attiva": False,
+    "ingresso_salvato": False,
+    "form_ingresso_ver": 0,
+    "valore_chiave_proposta": 0,
+    "ricerca_attiva": False,
+    "ricerca_risultati": [],
+    "vettura_selezionata": None,
+    "azione_attiva": None,
+    "post_azione_msg": None,
+    "chk_spost": False,
+    "chk_mod": False,
+    "chk_cons": False,
+}
+
+for key, default_value in SESSION_DEFAULTS.items():
+    if key not in st.session_state:
+        st.session_state[key] = default_value
+
+if st.session_state["last_action"] is None:
+    st.session_state["last_action"] = datetime.now(timezone.utc)
 
 # Pulizia cache all'avvio
 st.cache_data.clear()
