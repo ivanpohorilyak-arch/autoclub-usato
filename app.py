@@ -64,7 +64,7 @@ ZONE_INFO = {
 TIMEOUT_MINUTI = 20
 
 st.set_page_config(
-    page_title="Autoclub Usato 1.1",
+    page_title="Autoclub Usato 1.1 Master",
     page_icon="assets/icon.png",
     layout="wide"
 )
@@ -256,7 +256,7 @@ controllo_timeout()
 
 # --- 6. LOGIN & MENU PRINCIPALE ---
 if st.session_state['user_autenticato'] is None:
-    st.title("🔐 Accesso Autoclub Center Usato 1.1") 
+    st.title("🔐 Accesso Autoclub Usato 1.1 Master") 
     lista_u = get_lista_utenti_login() 
     u = st.selectbox("Operatore", ["- Seleziona -"] + lista_u) 
     p = st.text_input("PIN", type="password") 
@@ -327,7 +327,7 @@ else:
                 step=1
             ) 
 
-            # --- LOGICA INTELLIGENTE PREVIEW DUPLICATO (FIX DEFINITIVO + EXTRA) ---
+            # --- LOGICA INTELLIGENTE PREVIEW DUPLICATO ---
             if n_chiave > 0 and targa:
                 check_preview = supabase.table("parco_usato") \
                     .select("targa") \
@@ -338,12 +338,8 @@ else:
 
                 if check_preview.data:
                     targa_esistente = check_preview.data[0]["targa"]
-                    # Mostra avviso solo se è un'altra vettura
                     if targa_esistente != targa:
-                        st.error(
-                            f"🚨 ATTENZIONE: la chiave {n_chiave} è già utilizzata "
-                            f"dalla vettura {targa_esistente}"
-                        )
+                        st.error(f"🚨 ATTENZIONE: la chiave {n_chiave} è già utilizzata dalla vettura {targa_esistente}")
 
             note = st.text_area("Note") 
             submit = st.form_submit_button("REGISTRA LA VETTURA", disabled=not st.session_state['zona_id']) 
@@ -367,7 +363,7 @@ else:
                 } 
                 supabase.table("parco_usato").insert(payload).execute() 
 
-                registra_log(targa, "Ingresso", f"In {st.session_state['zona_nome']} | Nota: {note}" if note else f"In {st.session_state['zona_nome']}", utente_attivo) 
+                registra_log(targa, "Ingresso", f"In {st.session_state['zona_nome']}", utente_attivo) 
 
                 st.session_state["ingresso_salvato"] = { "targa": targa, "modello": f"{marca} {modello}", "colore": colore, "km": int(km), "chiave": int(n_chiave), "zona": st.session_state["zona_nome"] } 
                 st.session_state["valore_chiave_proposta"] = 0
@@ -443,9 +439,10 @@ else:
                     else: st.info("Nessuno storico disponibile") 
                 st.markdown("---") 
                 col_a, col_b, col_c = st.columns(3) 
-                abilita_spost = col_a.checkbox("🔄 Spostamento", key="chk_spost", on_change=cb_spost) 
-                abilita_mod = col_b.checkbox("✏️ Modifica", key="chk_mod", on_change=cb_mod) 
-                abilita_consegna = col_c.checkbox("🔴 Consegna", key="chk_cons", on_change=cb_cons) 
+                col_a.checkbox("🔄 Spostamento", key="chk_spost", on_change=cb_spost) 
+                col_b.checkbox("✏️ Modifica", key="chk_mod", on_change=cb_mod) 
+                col_c.checkbox("🔴 Consegna", key="chk_cons", on_change=cb_cons) 
+                
                 if st.session_state["azione_attiva"] == "spost": 
                     if not st.session_state.camera_attiva: st.warning("📷 Per spostare la vettura devi **attivare lo Scanner QR** dalla sidebar") 
                     else: 
@@ -462,30 +459,62 @@ else:
                                     if nota_spost: nuova_nota = f"{nuova_nota}\n[{datetime.now().strftime('%d/%m %H:%M')}] {nota_spost}" 
                                     supabase.table("parco_usato").update({"zona_id": z_id, "zona_attuale": ZONE_INFO[z_id], "note": nuova_nota}).eq("targa", v['targa']).execute() 
 
-                                    registra_log(v["targa"], "Spostamento", f"In {ZONE_INFO[z_id]} | Nota: {nota_spost.strip()}" if nota_spost.strip() else f"In {ZONE_INFO[z_id]}", utente_attivo) 
+                                    registra_log(v["targa"], "Spostamento", f"In {ZONE_INFO[z_id]}", utente_attivo) 
 
                                     st.session_state["post_azione_msg"] = f"✅ Vettura spostata correttamente in **{ZONE_INFO[z_id]}**" 
                                     reset_azione() 
                                     st.rerun() 
                             else: st.error("❌ QR non valido") 
+
+                # --- BLOCCO MODIFICA INTEGRATO ---
                 elif st.session_state["azione_attiva"] == "mod": 
                     with st.form("f_mod_v"): 
+                        # 1. Campo Targa aggiunto in cima al form
+                        nuova_targa = st.text_input("Targa", v["targa"]).upper().strip()
                         nota_mod = st.text_area("Note", v["note"])
+
                         upd = { 
+                            "targa": nuova_targa,
                             "marca_modello": st.text_input("Marca / Modello", v["marca_modello"]).upper(), 
                             "colore": st.text_input("Colore", v["colore"]).capitalize(), 
                             "km": st.number_input("KM", value=int(v['km'])), 
                             "numero_chiave": st.number_input("Chiave", value=int(v['numero_chiave'])), 
                             "note": nota_mod 
                         } 
+
                         if st.form_submit_button("💾 SALVA MODIFICHE"): 
+                            # --- CONTROLLI DI VALIDAZIONE ---
+                            
+                            # A. Validità formato Targa
+                            if not re.match(r'^[A-Z]{2}[0-9]{3}[A-Z]{2}$', nuova_targa):
+                                st.error("❌ Formato targa non valido (es. AA123BB)")
+                                st.stop()
+
+                            # B. Controllo duplicato Targa (solo se è stata cambiata)
+                            if nuova_targa != v["targa"]:
+                                check_t = supabase.table("parco_usato").select("targa").eq("targa", nuova_targa).eq("stato", "PRESENTE").limit(1).execute()
+                                if check_t.data:
+                                    st.error(f"❌ Errore: la targa {nuova_targa} è già presente in piazzale!")
+                                    st.stop()
+
+                            # C. Controllo duplicato Chiave
                             if int(upd["numero_chiave"]) > 0 and int(upd["numero_chiave"]) != v["numero_chiave"]:
                                 check_k = supabase.table("parco_usato").select("targa").eq("numero_chiave", int(upd["numero_chiave"])).eq("stato", "PRESENTE").limit(1).execute()
-                                if check_k.data: st.error(f"La chiave {upd['numero_chiave']} è già occupata"); st.stop()
+                                if check_k.data: 
+                                    st.error(f"❌ Errore: la chiave {upd['numero_chiave']} è già occupata"); 
+                                    st.stop()
 
+                            # --- ESECUZIONE AGGIORNAMENTO ---
+                            
+                            # Usiamo la targa originale v["targa"] come chiave di ricerca per l'update
                             supabase.table("parco_usato").update(upd).eq("targa", v['targa']).execute() 
 
+                            # --- GESTIONE LOG E FEEDBACK ---
                             diff = descrivi_modifiche(v, upd)
+                            # Se la targa è cambiata, la aggiungiamo manualmente alla descrizione del log
+                            if nuova_targa != v["targa"]:
+                                diff = f"Targa ({v['targa']} → {nuova_targa}), " + diff
+
                             if diff and nota_mod.strip():
                                 dettaglio = f"Modificati: {diff} | Nota: {nota_mod.strip()}"
                             elif diff:
@@ -495,10 +524,13 @@ else:
                             else:
                                 dettaglio = "Correzione dati"
 
-                            registra_log(v["targa"], "Modifica", dettaglio, utente_attivo) 
-                            st.session_state["post_azione_msg"] = f"✅ Dati della vettura {v['targa']} aggiornati correttamente" 
+                            # Registriamo il log sulla NUOVA targa per mantenere la continuità
+                            registra_log(nuova_targa, "Modifica", dettaglio, utente_attivo) 
+                            
+                            st.session_state["post_azione_msg"] = f"✅ Dati della vettura {nuova_targa} aggiornati correttamente" 
                             reset_azione() 
                             st.rerun() 
+                
                 elif st.session_state["azione_attiva"] == "cons": 
                     if not st.session_state.can_consegna: st.error("🔒 Non sei autorizzato alla CONSEGNA") 
                     else: 
@@ -609,16 +641,8 @@ else:
 
         if duplicati:
             st.error("❌ ATTENZIONE: Sono presenti chiavi duplicate nel sistema!")
-
-            df_dup = []
-            for d in duplicati:
-                df_dup.append({
-                    "Numero Chiave": d[0],
-                    "Targhe Coinvolte": ", ".join(d[1])
-                })
-
+            df_dup = [{"Numero Chiave": d[0], "Targhe Coinvolte": ", ".join(d[1])} for d in duplicati]
             st.dataframe(pd.DataFrame(df_dup), use_container_width=True)
-
         else:
             st.success("✅ Nessuna chiave duplicata rilevata")
 
@@ -681,7 +705,7 @@ else:
         res = supabase.table("log_movimenti").select("*").ilike("dettaglio", f"%{ZONE_INFO[z_sel]}%").limit(50).execute() 
         if res.data: st.dataframe(pd.DataFrame(res.data)[["targa", "azione", "utente"]], use_container_width=True) 
 
-   # --- 17. GESTIONE UTENTI (ADMIN) --- 
+    # --- 18. GESTIONE UTENTI (ADMIN) --- 
     elif scelta == "👥 Gestione Utenti":
         st.subheader("👥 Gestione Utenti (Admin)")
         if st.session_state["ruolo"] != "admin": st.error("Accesso negato"); st.stop()
@@ -722,9 +746,9 @@ else:
                         if u_sel_nome == utente_loggato and not new_attivo: st.error("Non puoi disattivarti"); st.stop()
                         if ut_data["ruolo"] == "admin" and (new_ruolo != "admin" or not new_attivo) and len(admin_attivi) <= 1:
                             st.error("Deve esserci almeno un admin attivo"); st.stop()
-                        upd = {"ruolo": new_ruolo, "can_consegna": new_can_cons, "attivo": new_attivo}
-                        if new_pin: upd["pin"] = new_pin
-                        supabase.table("utenti").update(upd).eq("nome", u_sel_nome).execute()
+                        upd_u = {"ruolo": new_ruolo, "can_consegna": new_can_cons, "attivo": new_attivo}
+                        if new_pin: upd_u["pin"] = new_pin
+                        supabase.table("utenti").update(upd_u).eq("nome", u_sel_nome).execute()
                         st.success("Aggiornato"); time.sleep(1); st.rerun()
 
                     if elimina:
