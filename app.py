@@ -64,7 +64,7 @@ ZONE_INFO = {
 TIMEOUT_MINUTI = 20
 
 st.set_page_config(
-    page_title="Autoclub Usato 1.1 Master",
+    page_title="Autoclub Usato 1.1",
     page_icon="assets/icon.png",
     layout="wide"
 )
