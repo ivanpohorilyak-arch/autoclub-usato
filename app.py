@@ -256,7 +256,7 @@ controllo_timeout()
 
 # --- 6. LOGIN & MENU PRINCIPALE ---
 if st.session_state['user_autenticato'] is None:
-    st.title("🔐 Accesso Autoclub Usato 1.1 Master") 
+    st.title("🔐 Accesso Autoclub Usato 1.1") 
     lista_u = get_lista_utenti_login() 
     u = st.selectbox("Operatore", ["- Seleziona -"] + lista_u) 
     p = st.text_input("PIN", type="password") 
