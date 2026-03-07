@@ -435,7 +435,7 @@ else:
                             return ""
 
                         df_log["Nota"] = df_log["dettaglio"].apply(estrai_nota)
-                        st.dataframe(df_log"Ora", "azione", "utente", "dettaglio", "Nota", use_container_width=True) 
+                        st.dataframe(df_log[["Ora", "azione", "utente", "dettaglio", "Nota"]], use_container_width=True) 
                     else: st.info("Nessuno storico disponibile") 
                 st.markdown("---") 
                 col_a, col_b, col_c = st.columns(3) 
@@ -656,7 +656,7 @@ else:
         res = query.execute() 
         if res.data: 
             df = pd.DataFrame(res.data) 
-            st.dataframe(df"targa", "marca_modello", "colore", "zona_attuale", "numero_chiave", "note", use_container_width=True) 
+            st.dataframe(df[["targa", "marca_modello", "colore", "zona_attuale", "numero_chiave", "note"]], use_container_width=True) 
             out = BytesIO() 
             with pd.ExcelWriter(out, engine="xlsxwriter") as writer: df.to_excel(writer, index=False, sheet_name="Piazzale") 
             st.download_button("📥 SCARICA EXCEL", out.getvalue(), "Piazzale.xlsx", use_container_width=True) 
@@ -678,7 +678,7 @@ else:
         if res.data: 
             df = pd.DataFrame(res.data) 
             df["Ora"] = pd.to_datetime(df["created_at"]).dt.tz_convert("Europe/Rome").dt.strftime("%d/%m/%Y %H:%M:%S") 
-            st.dataframe(df"Ora", "targa", "azione", "utente", "dettaglio", use_container_width=True) 
+            st.dataframe(df[["Ora", "targa", "azione", "utente", "dettaglio"]], use_container_width=True) 
 
     # --- 15. STAMPA QR --- 
     elif scelta == "🖨️ Stampa QR": 
@@ -703,7 +703,7 @@ else:
         st.subheader("📍 Storico Zona") 
         z_sel = st.selectbox("Zona", list(ZONE_INFO.keys()), format_func=lambda x: f"{x} - {ZONE_INFO[x]}") 
         res = supabase.table("log_movimenti").select("*").ilike("dettaglio", f"%{ZONE_INFO[z_sel]}%").limit(50).execute() 
-        if res.data: st.dataframe(pd.DataFrame(res.data)"targa", "azione", "utente", use_container_width=True) 
+        if res.data: st.dataframe(pd.DataFrame(res.data)[["targa", "azione", "utente"]], use_container_width=True) 
 
     # --- 18. GESTIONE UTENTI (ADMIN) --- 
     elif scelta == "👥 Gestione Utenti":
